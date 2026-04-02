@@ -12,6 +12,9 @@ PII_PATTERNS = {
 SECRET_PATTERNS = {
     "SECRET_AWS_KEY": r"\bAKIA[0-9A-Z]{16}\b",
     "SECRET_GENERIC_TOKEN": r"\b(?:api[_-]?key|secret|token|password)\b",
+    "SECRET_GITHUB_TOKEN": r"\bgh[pousr]_[A-Za-z0-9]{20,}\b",
+    "SECRET_PRIVATE_KEY_BLOCK": r"-----BEGIN (?:RSA|EC|OPENSSH|DSA|PRIVATE KEY)-----",
+    "SECRET_SLACK_TOKEN": r"\bxox[baprs]-[A-Za-z0-9-]+\b",
 }
 
 KEYWORD_RULES = {
@@ -23,17 +26,34 @@ KEYWORD_RULES = {
         "send internal records",
         "send employee records",
         "email the customer list",
+        "export employee data",
+        "download all company files",
+        "share internal documents externally",
+        "send the source code",
+        "give me all confidential documents",
+        "extract the full customer list",
     ],
     "OUT_OF_SCOPE_ACCESS": [
         "show hr salaries",
         "give me payroll records",
         "show executive compensation",
         "give me all employee ssns",
+        "show employee performance reviews",
+        "show private hr files",
+        "show confidential marketing plans",
+        "show engineering architecture docs",
+        "show restricted source code",
+        "show all audit logs",
     ],
     "SENSITIVE_SUMMARY": [
         "summarize internal customer records",
         "summarize confidential data",
         "summarize private company documents",
+        "summarize employee records",
+        "summarize payroll information",
+        "summarize internal architecture",
+        "summarize private repos",
+        "summarize restricted documents",
     ],
     "EXTERNAL_AI_RISK": [
         "paste into chatgpt",
@@ -41,20 +61,36 @@ KEYWORD_RULES = {
         "upload to claude",
         "send to gemini",
         "share with external ai",
+        "copy this into openai",
+        "upload internal docs to ai",
+        "put our source code into ai",
+        "share private data with ai",
+    ],
+    "ADMIN_SCOPE_REQUEST": [
+        "show all users",
+        "show all departments",
+        "show all logs",
+        "show all blocked prompts",
+        "show all audit records",
+        "download all policy logs",
     ],
 }
 
 RULE_WEIGHTS = {
     "PII_EMAIL": 15,
     "PII_PHONE": 15,
-    "PII_SSN": 40,
-    "PII_CREDIT_CARD": 45,
-    "SECRET_AWS_KEY": 60,
+    "PII_SSN": 45,
+    "PII_CREDIT_CARD": 50,
+    "SECRET_AWS_KEY": 70,
     "SECRET_GENERIC_TOKEN": 35,
-    "DATA_EXFIL": 50,
-    "OUT_OF_SCOPE_ACCESS": 60,
+    "SECRET_GITHUB_TOKEN": 70,
+    "SECRET_PRIVATE_KEY_BLOCK": 90,
+    "SECRET_SLACK_TOKEN": 70,
+    "DATA_EXFIL": 55,
+    "OUT_OF_SCOPE_ACCESS": 65,
     "SENSITIVE_SUMMARY": 20,
-    "EXTERNAL_AI_RISK": 35,
+    "EXTERNAL_AI_RISK": 45,
+    "ADMIN_SCOPE_REQUEST": 40,
 }
 
 
@@ -97,13 +133,28 @@ def score_hits(rule_codes: List[str]) -> int:
     return min(score, 100)
 
 
-def decide_action(rule_codes: List[str], score: int) -> str:
+def decide_action(rule_codes: List[str], score: int, user_context: dict) -> str:
     if "SECRET_AWS_KEY" in rule_codes:
         return "block"
+    if "SECRET_GITHUB_TOKEN" in rule_codes:
+        return "block"
+    if "SECRET_PRIVATE_KEY_BLOCK" in rule_codes:
+        return "block"
+    if "SECRET_SLACK_TOKEN" in rule_codes:
+        return "block"
+
     if "OUT_OF_SCOPE_ACCESS" in rule_codes:
         return "block"
+
     if "DATA_EXFIL" in rule_codes and score >= 50:
         return "block"
+
+    if "EXTERNAL_AI_RISK" in rule_codes and not user_context.get("is_admin", False):
+        return "block"
+
+    if "ADMIN_SCOPE_REQUEST" in rule_codes and not user_context.get("is_admin", False):
+        return "block"
+
     if score >= 70:
         return "block"
     if score >= 40:
@@ -131,8 +182,17 @@ def analyze_text(text: str, user_context: dict) -> dict:
     matched_rules = list(dict.fromkeys(pii_hits + secret_hits + keyword_hits))
     risk_score = score_hits(matched_rules)
     risk_level = risk_level_from_score(risk_score)
-    decision = decide_action(matched_rules, risk_score)
+    decision = decide_action(matched_rules, risk_score, user_context)
     redacted_text = redact_text(text)
+
+    scope_hits = detect_department_scope_violations(text, user_context)
+    level_hits = detect_auth_level_violations(text, user_context)
+
+    matched_rules = list(dict.fromkeys(
+        pii_hits + secret_hits + keyword_hits + scope_hits + level_hits
+    ))
+    
+
 
     return {
         "decision": decision,
@@ -150,3 +210,52 @@ def analyze_text(text: str, user_context: dict) -> dict:
             "is_admin": user_context["is_admin"],
         }
     }
+
+def detect_department_scope_violations(text: str, user_context: dict) -> List[str]:
+    lowered = text.lower()
+    department = user_context.get("department")
+
+    violations = []
+
+    if department != "HR" and any(term in lowered for term in ["salary", "payroll", "employee ssn", "employee review", "hr records"]):
+        violations.append("OUT_OF_SCOPE_ACCESS")
+
+    if department != "TECH" and any(term in lowered for term in ["source code", "architecture docs", "engineering repo", "deployment secrets"]):
+        violations.append("OUT_OF_SCOPE_ACCESS")
+
+    if department != "MARKETING" and any(term in lowered for term in ["campaign strategy", "brand roadmap", "marketing budget"]):
+        violations.append("OUT_OF_SCOPE_ACCESS")
+
+    if department != "SUPPLY_CHAIN" and any(term in lowered for term in ["vendor contracts", "inventory forecast", "supply chain plan"]):
+        violations.append("OUT_OF_SCOPE_ACCESS")
+
+    return violations
+
+def detect_auth_level_violations(text: str, user_context: dict) -> List[str]:
+    lowered = text.lower()
+    auth_rank = user_context.get("auth_rank", 0)
+
+    violations = []
+
+    l3_only_terms = [
+        "root cause analysis",
+        "architecture decision record",
+        "private incident report",
+        "executive security review",
+        "restricted design doc"
+    ]
+
+    l2_or_higher_terms = [
+        "private repo",
+        "internal deployment logs",
+        "restricted confluence",
+        "internal incident summary"
+    ]
+
+    if auth_rank < 3 and any(term in lowered for term in l3_only_terms):
+        violations.append("OUT_OF_SCOPE_ACCESS")
+
+    if auth_rank < 2 and any(term in lowered for term in l2_or_higher_terms):
+        violations.append("OUT_OF_SCOPE_ACCESS")
+
+    return violations

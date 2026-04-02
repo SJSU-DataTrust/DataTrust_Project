@@ -21,20 +21,29 @@ def analyze_prompt(
     policy_result = analyze_text(request.text, user_context)
 
     log_policy_event(
-        event_type="PROMPT_POLICY_ANALYSIS",
-        payload={
-            "user": {
-                "user_id": user_context["user_id"],
-                "email": user_context["email"],
-                "department": user_context["department"],
-                "auth_level": user_context["auth_level"],
-                "is_admin": user_context["is_admin"],
-            },
-            "input": {
-                "original_text": request.text,
-            },
-            "result": policy_result,
-        }
+    event_type="PROMPT_POLICY_ANALYSIS",
+    payload={
+        "user": {
+            "user_id": user_context["user_id"],
+            "email": user_context["email"],
+            "department": user_context["department"],
+            "auth_level": user_context["auth_level"],
+            "auth_rank": user_context["auth_rank"],
+            "is_admin": user_context["is_admin"],
+        },
+        "input": {
+            "original_text": request.text,
+        },
+        "result": {
+            "decision": policy_result["decision"],
+            "risk_level": policy_result["risk_level"],
+            "risk_score": policy_result["risk_score"],
+            "matched_rules": policy_result["matched_rules"],
+            "pii_hits": policy_result["pii_hits"],
+            "keyword_hits": policy_result["keyword_hits"],
+            "redacted_text": policy_result["redacted_text"],
+        },
+    }
     )
 
     return {
