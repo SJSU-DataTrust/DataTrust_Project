@@ -1,0 +1,18 @@
+const BACKEND_URL = "http://10.10.2.10:8000";
+
+export async function getRetrievalPlan(userId: string, text: string) {
+  const res = await fetch(`${BACKEND_URL}/retrieval-plan`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-User-Id": userId,
+    },
+    body: JSON.stringify({ text }),
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to get retrieval plan");
+  }
+
+  return res.json();
+}
