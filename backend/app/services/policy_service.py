@@ -133,7 +133,10 @@ def score_hits(rule_codes: List[str]) -> int:
     return min(score, 100)
 
 
-def decide_action(rule_codes: List[str], score: int, user_context: dict) -> str:
+def decide_action(rule_codes: list[str], score: int, user_context: dict) -> str:
+    if "OUT_OF_SCOPE_ACCESS" in rule_codes:
+        return "block"
+
     if "SECRET_AWS_KEY" in rule_codes:
         return "block"
     if "SECRET_GITHUB_TOKEN" in rule_codes:
@@ -141,9 +144,6 @@ def decide_action(rule_codes: List[str], score: int, user_context: dict) -> str:
     if "SECRET_PRIVATE_KEY_BLOCK" in rule_codes:
         return "block"
     if "SECRET_SLACK_TOKEN" in rule_codes:
-        return "block"
-
-    if "OUT_OF_SCOPE_ACCESS" in rule_codes:
         return "block"
 
     if "DATA_EXFIL" in rule_codes and score >= 50:
@@ -211,22 +211,57 @@ def analyze_text(text: str, user_context: dict) -> dict:
         }
     }
 
-def detect_department_scope_violations(text: str, user_context: dict) -> List[str]:
+def detect_department_scope_violations(text: str, user_context: dict) -> list[str]:
     lowered = text.lower()
     department = user_context.get("department")
-
     violations = []
 
-    if department != "HR" and any(term in lowered for term in ["salary", "payroll", "employee ssn", "employee review", "hr records"]):
+    hr_terms = [
+        "salary",
+        "salary details",
+        "payroll",
+        "payroll records",
+        "employee payroll",
+        "employee ssn",
+        "employee review",
+        "employee reviews",
+        "hr records",
+        "compensation"
+    ]
+
+    tech_terms = [
+        "source code",
+        "engineering repo",
+        "architecture docs",
+        "deployment secrets",
+        "root cause analysis",
+        "private repo"
+    ]
+
+    marketing_terms = [
+        "campaign strategy",
+        "marketing budget",
+        "brand roadmap",
+        "campaign plan"
+    ]
+
+    supply_terms = [
+        "vendor contracts",
+        "inventory forecast",
+        "supply chain plan",
+        "procurement terms"
+    ]
+
+    if department != "HR" and any(term in lowered for term in hr_terms):
         violations.append("OUT_OF_SCOPE_ACCESS")
 
-    if department != "TECH" and any(term in lowered for term in ["source code", "architecture docs", "engineering repo", "deployment secrets"]):
+    if department != "TECH" and any(term in lowered for term in tech_terms):
         violations.append("OUT_OF_SCOPE_ACCESS")
 
-    if department != "MARKETING" and any(term in lowered for term in ["campaign strategy", "brand roadmap", "marketing budget"]):
+    if department != "MARKETING" and any(term in lowered for term in marketing_terms):
         violations.append("OUT_OF_SCOPE_ACCESS")
 
-    if department != "SUPPLY_CHAIN" and any(term in lowered for term in ["vendor contracts", "inventory forecast", "supply chain plan"]):
+    if department != "SUPPLY_CHAIN" and any(term in lowered for term in supply_terms):
         violations.append("OUT_OF_SCOPE_ACCESS")
 
     return violations
