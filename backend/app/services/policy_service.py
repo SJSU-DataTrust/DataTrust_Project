@@ -134,33 +134,50 @@ def score_hits(rule_codes: List[str]) -> int:
 
 
 def decide_action(rule_codes: list[str], score: int, user_context: dict) -> str:
+    print("DEBUG decide_action rule_codes:", rule_codes)
+    print("DEBUG decide_action score:", score)
+    print("DEBUG decide_action is_admin:", user_context.get("is_admin", False))
+
     if "OUT_OF_SCOPE_ACCESS" in rule_codes:
+        print("DEBUG decide_action hit OUT_OF_SCOPE_ACCESS -> block")
         return "block"
 
     if "SECRET_AWS_KEY" in rule_codes:
+        print("DEBUG decide_action hit SECRET_AWS_KEY -> block")
         return "block"
     if "SECRET_GITHUB_TOKEN" in rule_codes:
+        print("DEBUG decide_action hit SECRET_GITHUB_TOKEN -> block")
         return "block"
     if "SECRET_PRIVATE_KEY_BLOCK" in rule_codes:
+        print("DEBUG decide_action hit SECRET_PRIVATE_KEY_BLOCK -> block")
         return "block"
     if "SECRET_SLACK_TOKEN" in rule_codes:
+        print("DEBUG decide_action hit SECRET_SLACK_TOKEN -> block")
         return "block"
 
     if "DATA_EXFIL" in rule_codes and score >= 50:
+        print("DEBUG decide_action hit DATA_EXFIL -> block")
         return "block"
 
     if "EXTERNAL_AI_RISK" in rule_codes and not user_context.get("is_admin", False):
+        print("DEBUG decide_action hit EXTERNAL_AI_RISK -> block")
         return "block"
 
     if "ADMIN_SCOPE_REQUEST" in rule_codes and not user_context.get("is_admin", False):
+        print("DEBUG decide_action hit ADMIN_SCOPE_REQUEST -> block")
         return "block"
 
     if score >= 70:
+        print("DEBUG decide_action score >= 70 -> block")
         return "block"
     if score >= 40:
+        print("DEBUG decide_action score >= 40 -> review")
         return "review"
     if score >= 15:
+        print("DEBUG decide_action score >= 15 -> redact")
         return "redact"
+
+    print("DEBUG decide_action default -> allow")
     return "allow"
 
 
@@ -178,21 +195,26 @@ def analyze_text(text: str, user_context: dict) -> dict:
     pii_hits = find_pattern_hits(text, PII_PATTERNS)
     secret_hits = find_pattern_hits(text, SECRET_PATTERNS)
     keyword_hits = find_keyword_hits(text, KEYWORD_RULES)
-
-    matched_rules = list(dict.fromkeys(pii_hits + secret_hits + keyword_hits))
-    risk_score = score_hits(matched_rules)
-    risk_level = risk_level_from_score(risk_score)
-    decision = decide_action(matched_rules, risk_score, user_context)
-    redacted_text = redact_text(text)
-
     scope_hits = detect_department_scope_violations(text, user_context)
     level_hits = detect_auth_level_violations(text, user_context)
 
     matched_rules = list(dict.fromkeys(
         pii_hits + secret_hits + keyword_hits + scope_hits + level_hits
     ))
-    
 
+    risk_score = score_hits(matched_rules)
+    risk_level = risk_level_from_score(risk_score)
+
+    print("DEBUG user_context:", user_context)
+    print("DEBUG matched_rules:", matched_rules)
+    print("DEBUG risk_score:", risk_score)
+    print("DEBUG about to call decide_action")
+
+    decision = decide_action(matched_rules, risk_score, user_context)
+
+    print("DEBUG decision returned:", decision)
+
+    redacted_text = redact_text(text)
 
     return {
         "decision": decision,
