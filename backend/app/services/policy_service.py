@@ -58,13 +58,27 @@ KEYWORD_RULES = {
     "EXTERNAL_AI_RISK": [
         "paste into chatgpt",
         "send to chatgpt",
+        "upload to chatgpt",
+        "use chatgpt",
+        "paste into claude",
+        "send to claude",
         "upload to claude",
+        "use claude",
+        "paste into gemini",
         "send to gemini",
+        "upload to gemini",
+        "use gemini",
         "share with external ai",
         "copy this into openai",
         "upload internal docs to ai",
         "put our source code into ai",
         "share private data with ai",
+        "upload internal docs to chatgpt",
+        "upload internal docs to claude",
+        "upload internal docs to gemini",
+        "summarize this in chatgpt",
+        "summarize this in claude",
+        "summarize this in gemini",
     ],
     "ADMIN_SCOPE_REQUEST": [
         "show all users",
@@ -195,11 +209,12 @@ def analyze_text(text: str, user_context: dict) -> dict:
     pii_hits = find_pattern_hits(text, PII_PATTERNS)
     secret_hits = find_pattern_hits(text, SECRET_PATTERNS)
     keyword_hits = find_keyword_hits(text, KEYWORD_RULES)
+    external_ai_hits = detect_external_ai_risk(text)
     scope_hits = detect_department_scope_violations(text, user_context)
     level_hits = detect_auth_level_violations(text, user_context)
 
     matched_rules = list(dict.fromkeys(
-        pii_hits + secret_hits + keyword_hits + scope_hits + level_hits
+    pii_hits + secret_hits + keyword_hits + external_ai_hits + scope_hits + level_hits
     ))
 
     risk_score = score_hits(matched_rules)
@@ -316,3 +331,52 @@ def detect_auth_level_violations(text: str, user_context: dict) -> List[str]:
         violations.append("OUT_OF_SCOPE_ACCESS")
 
     return violations
+
+def detect_external_ai_risk(text: str) -> list[str]:
+    lowered = text.lower()
+
+    ai_tools = [
+        "chatgpt",
+        "openai",
+        "claude",
+        "gemini",
+        "copilot",
+        "perplexity",
+        "bard"
+    ]
+
+    transfer_verbs = [
+        "upload",
+        "send",
+        "paste",
+        "share",
+        "copy",
+        "put"
+    ]
+
+    sensitive_targets = [
+        "internal docs",
+        "internal documents",
+        "company docs",
+        "company documents",
+        "source code",
+        "customer data",
+        "employee data",
+        "private data",
+        "confidential data",
+        "internal records",
+        "repo",
+        "repository",
+    ]
+
+    ai_mentioned = any(tool in lowered for tool in ai_tools)
+    transfer_mentioned = any(word in lowered for word in transfer_verbs)
+    sensitive_content_mentioned = any(term in lowered for term in sensitive_targets)
+
+    if ai_mentioned and transfer_mentioned:
+        return ["EXTERNAL_AI_RISK"]
+
+    if ai_mentioned and sensitive_content_mentioned:
+        return ["EXTERNAL_AI_RISK"]
+
+    return []
