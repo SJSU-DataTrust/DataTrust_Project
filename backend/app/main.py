@@ -7,7 +7,7 @@ from app.routers.retrieval import router as retrieval_router
 from app.routers.ingestion import router as ingestion_router
 from app.routers.verification import router as verification_router
 from app.routers.chat import router as chat_router  
-from app.routers.debug import debug_router
+from app.routers.debug import router as debug_router
 
 app = FastAPI(title="DataTrust Backend")
 
