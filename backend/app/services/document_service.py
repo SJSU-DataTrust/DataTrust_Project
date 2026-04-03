@@ -2,6 +2,20 @@ from datetime import datetime, timezone
 from app.db.supabase_client import supabase
 
 
+def get_document_by_source(source_system_id: int, external_doc_id: str) -> dict | None:
+    result = (
+        supabase.table("documents")
+        .select("*")
+        .eq("source_system_id", source_system_id)
+        .eq("external_doc_id", external_doc_id)
+        .limit(1)
+        .execute()
+    )
+    if result.data:
+        return result.data[0]
+    return None
+
+
 def upsert_document(document_payload: dict) -> dict:
     payload = {
         **document_payload,
@@ -28,11 +42,17 @@ def deactivate_chunks_for_document(document_id: int):
     }).eq("document_id", document_id).execute()
 
 
-def insert_chunk(chunk_payload: dict):
+def upsert_chunk(chunk_payload: dict):
     payload = {
         **chunk_payload,
+        "is_active": True,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    result = supabase.table("document_chunks").insert(payload).execute()
+    result = (
+        supabase.table("document_chunks")
+        .upsert(payload, on_conflict="document_id,chunk_index,chunk_hash")
+        .execute()
+    )
+
     return result.data[0] if result.data else None
