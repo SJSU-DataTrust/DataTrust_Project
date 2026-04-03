@@ -1,74 +1,63 @@
 import { useState } from "react";
-import { getRetrievalPlan } from "../services/api";
+import { sendChat } from "../services/api";
 
-type RetrievalPlan = {
-  query: string;
+type ChatApiResponse = {
   status: string;
-  summary: {
-    message: string;
-    selected_source_count: number;
-    allowed_scope_count: number;
-  };
-  user_context: {
-    user_id: string;
-    department: string;
-    auth_level: string;
-    auth_rank: number;
+  answer: string | null;
+  policy: {
+    status: string;
+    decision: string;
+    code?: string | null;
+    reason_category?: string | null;
+    user_safe_explanation?: string | null;
+    suggested_safe_alternative?: string | null;
+    matched_rules: string[];
+    categories: string[];
+    action: string;
+    risk_level: string;
+    risk_score: number;
   };
   selected_sources: string[];
-  selection_reasoning: string[];
-  allowed_scope_count: number;
-  allowed_scopes: Array<{
-    scope_id: number;
-    source_type: string;
-    source_name: string;
-    resource_type: string;
-    external_resource_id: string;
-    parent_resource_id?: string | null;
-    resource_name: string;
-    resource_path: string;
-    department: string;
-    department_name: string;
-    min_auth_level: string;
-    min_auth_rank: number;
-    metadata: Record<string, any>;
+  source_references: Array<{
+    chunk_id: number;
+    document_id: number;
+    title?: string | null;
+    resource_path?: string | null;
+    source_type?: string | null;
+    resource_name?: string | null;
+    score: number;
   }>;
-  blocked_sources: Array<{
-    source: string;
-    reason: string;
-  }>;
-  source_plan_count: number;
-  source_plans: Array<{
-    source: string;
-    reasoning: string;
-    action: string;
-    status: string;
-    allowed_scope_count: number;
-    matched_scopes: Array<{
-      scope_id: number;
-      resource_name: string;
-      resource_type: string;
-      resource_path: string;
-      min_auth_level: string;
-    }>;
-  }>;
+  retrieval_count: number;
+  metadata: Record<string, any>;
 };
 
 type ChatMessage =
   | { type: "user"; text: string }
-  | { type: "system"; plan: RetrievalPlan };
+  | { type: "blocked"; data: ChatApiResponse }
+  | { type: "answer"; data: ChatApiResponse }
+  | { type: "system"; text: string };
 
-function Pill({ children }: { children: React.ReactNode }) {
+function Pill({
+  children,
+  color = "#1f2937",
+  textColor = "#e5e7eb",
+  borderColor = "#374151",
+}: {
+  children: React.ReactNode;
+  color?: string;
+  textColor?: string;
+  borderColor?: string;
+}) {
   return (
     <span
       style={{
         display: "inline-block",
         padding: "6px 10px",
         borderRadius: "999px",
-        background: "#1f2937",
-        color: "#e5e7eb",
+        background: color,
+        color: textColor,
         fontSize: "12px",
-        border: "1px solid #374151",
+        border: `1px solid ${borderColor}`,
         marginRight: "8px",
         marginBottom: "8px",
       }}
@@ -89,7 +78,7 @@ function SectionCard({
     <div
       style={{
         background: "#111827",
-        border: "1px solid #374151",
+        border: "1px solid #334155",
         borderRadius: "12px",
         padding: "14px",
         marginTop: "12px",
@@ -103,7 +92,60 @@ function SectionCard({
   );
 }
 
-function SystemPlanCard({ plan }: { plan: RetrievalPlan }) {
+function BlockedMessageCard({ data }: { data: ChatApiResponse }) {
+  return (
+    <div
+      style={{
+        maxWidth: "900px",
+        background: "#2a0f12",
+        border: "1px solid #7f1d1d",
+        borderRadius: "16px",
+        padding: "16px",
+        color: "#fecaca",
+      }}
+    >
+      <div style={{ fontSize: "16px", fontWeight: 700, marginBottom: "10px" }}>
+        Blocked by policy
+      </div>
+
+      <div style={{ marginBottom: "12px" }}>
+        <Pill color="#3f1d1d" textColor="#fecaca" borderColor="#7f1d1d">
+          Decision: {data.policy.decision}
+        </Pill>
+        <Pill color="#3f1d1d" textColor="#fecaca" borderColor="#7f1d1d">
+          Category: {data.policy.reason_category || "RESTRICTED_REQUEST"}
+        </Pill>
+        <Pill color="#3f1d1d" textColor="#fecaca" borderColor="#7f1d1d">
+          Risk: {data.policy.risk_level} ({data.policy.risk_score})
+        </Pill>
+      </div>
+
+      <div style={{ marginBottom: "10px", color: "#fee2e2" }}>
+        {data.policy.user_safe_explanation || "This request is not allowed by policy."}
+      </div>
+
+      {data.policy.suggested_safe_alternative && (
+        <div style={{ color: "#fecaca", fontSize: "14px" }}>
+          <strong>Allowed alternative:</strong> {data.policy.suggested_safe_alternative}
+        </div>
+      )}
+
+      {data.policy.matched_rules?.length > 0 && (
+        <SectionCard title="Matched Policy Rules">
+          <div>
+            {data.policy.matched_rules.map((rule) => (
+              <Pill key={rule} color="#3f1d1d" textColor="#fecaca" borderColor="#7f1d1d">
+                {rule}
+              </Pill>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+    </div>
+  );
+}
+
+function AnswerCard({ data }: { data: ChatApiResponse }) {
   return (
     <div
       style={{
@@ -115,105 +157,58 @@ function SystemPlanCard({ plan }: { plan: RetrievalPlan }) {
         color: "#e5e7eb",
       }}
     >
-      <div style={{ marginBottom: "12px", fontSize: "15px", color: "#cbd5e1" }}>
-        {plan.summary.message}
-      </div>
-
       <div style={{ marginBottom: "12px" }}>
-        <Pill>Status: {plan.status}</Pill>
-        <Pill>Department: {plan.user_context.department}</Pill>
-        <Pill>Level: {plan.user_context.auth_level}</Pill>
-        <Pill>Sources: {plan.summary.selected_source_count}</Pill>
-        <Pill>Allowed Scopes: {plan.summary.allowed_scope_count}</Pill>
+        <Pill>Decision: {data.policy.decision}</Pill>
+        <Pill>Action: {data.policy.action}</Pill>
+        <Pill>Risk: {data.policy.risk_level}</Pill>
+        <Pill>Retrieved: {data.retrieval_count}</Pill>
       </div>
 
-      <SectionCard title="Selected Sources">
-        <div>
-          {plan.selected_sources.length > 0 ? (
-            plan.selected_sources.map((source) => <Pill key={source}>{source}</Pill>)
-          ) : (
-            <div style={{ color: "#94a3b8" }}>No sources selected</div>
-          )}
-        </div>
-      </SectionCard>
+      <div
+        style={{
+          background: "#111827",
+          border: "1px solid #334155",
+          borderRadius: "12px",
+          padding: "14px",
+          whiteSpace: "pre-wrap",
+          lineHeight: 1.6,
+        }}
+      >
+        {data.answer || "No answer returned."}
+      </div>
 
-      <SectionCard title="Selection Reasoning">
-        <ul style={{ margin: 0, paddingLeft: "20px", color: "#cbd5e1" }}>
-          {plan.selection_reasoning.map((reason, idx) => (
-            <li key={idx} style={{ marginBottom: "6px" }}>
-              {reason}
-            </li>
-          ))}
-        </ul>
-      </SectionCard>
+      {data.selected_sources?.length > 0 && (
+        <SectionCard title="Selected Sources">
+          <div>
+            {data.selected_sources.map((source) => (
+              <Pill key={source}>{source}</Pill>
+            ))}
+          </div>
+        </SectionCard>
+      )}
 
-      <SectionCard title="Allowed Resource Scopes">
-        <div style={{ display: "grid", gap: "10px" }}>
-          {plan.allowed_scopes.map((scope) => (
-            <div
-              key={scope.scope_id}
-              style={{
-                background: "#1e293b",
-                border: "1px solid #334155",
-                borderRadius: "10px",
-                padding: "12px",
-              }}
-            >
-              <div style={{ fontWeight: 600 }}>{scope.resource_name}</div>
-              <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "4px" }}>
-                {scope.source_type} • {scope.resource_type} • {scope.resource_path}
-              </div>
-              <div style={{ marginTop: "8px" }}>
-                <Pill>{scope.department}</Pill>
-                <Pill>Min Level: {scope.min_auth_level}</Pill>
-              </div>
-            </div>
-          ))}
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Connector Actions Planned">
-        <div style={{ display: "grid", gap: "10px" }}>
-          {plan.source_plans.map((sourcePlan, idx) => (
-            <div
-              key={idx}
-              style={{
-                background: "#1e293b",
-                border: "1px solid #334155",
-                borderRadius: "10px",
-                padding: "12px",
-              }}
-            >
-              <div style={{ fontWeight: 600 }}>{sourcePlan.source}</div>
-              <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "4px" }}>
-                {sourcePlan.reasoning}
-              </div>
-              <div style={{ marginTop: "8px" }}>
-                <Pill>Action: {sourcePlan.action}</Pill>
-                <Pill>Status: {sourcePlan.status}</Pill>
-                <Pill>Scopes: {sourcePlan.allowed_scope_count}</Pill>
-              </div>
-            </div>
-          ))}
-        </div>
-      </SectionCard>
-
-      {plan.blocked_sources.length > 0 && (
-        <SectionCard title="Non-selected Allowed Sources">
+      {data.source_references?.length > 0 && (
+        <SectionCard title="Source References">
           <div style={{ display: "grid", gap: "10px" }}>
-            {plan.blocked_sources.map((item, idx) => (
+            {data.source_references.map((ref) => (
               <div
-                key={idx}
+                key={ref.chunk_id}
                 style={{
-                  background: "#3f1d1d",
-                  border: "1px solid #7f1d1d",
+                  background: "#1e293b",
+                  border: "1px solid #334155",
                   borderRadius: "10px",
                   padding: "12px",
                 }}
               >
-                <div style={{ fontWeight: 600 }}>{item.source}</div>
-                <div style={{ fontSize: "13px", color: "#fecaca", marginTop: "4px" }}>
-                  {item.reason}
+                <div style={{ fontWeight: 600 }}>
+                  {ref.resource_name || ref.title || `Chunk ${ref.chunk_id}`}
+                </div>
+                <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "4px" }}>
+                  {ref.source_type} • {ref.resource_path || "No path"}
+                </div>
+                <div style={{ marginTop: "8px" }}>
+                  <Pill>Chunk ID: {ref.chunk_id}</Pill>
+                  <Pill>Score: {ref.score.toFixed(4)}</Pill>
                 </div>
               </div>
             ))}
@@ -230,6 +225,7 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Keep fixed user during development
   const userId = "c68c63d4-707c-4e82-896e-dd5fc2704371";
 
   const handleSend = async () => {
@@ -243,11 +239,27 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, { type: "user", text: userText }]);
 
     try {
-      const data = await getRetrievalPlan(userId, userText);
-      setMessages((prev) => [...prev, { type: "system", plan: data }]);
+      const result = await sendChat(userId, userText);
+
+      if (result.blocked) {
+        setMessages((prev) => [...prev, { type: "blocked", data: result.data }]);
+      } else {
+        setMessages((prev) => [...prev, { type: "answer", data: result.data }]);
+      }
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Failed to fetch retrieval plan");
+
+      if (err.message === "AUTH_REQUIRED") {
+        setMessages((prev) => [
+          ...prev,
+          {
+            type: "system",
+            text: "Your session has expired. Please sign in again.",
+          },
+        ]);
+      } else {
+        setError(err.message || "Request failed");
+      }
     } finally {
       setLoading(false);
     }
@@ -264,6 +276,7 @@ export default function ChatPage() {
         }}
       >
         <h2 style={{ margin: 0, marginBottom: "20px" }}>DataTrust</h2>
+
         <button
           style={{
             width: "100%",
@@ -282,6 +295,7 @@ export default function ChatPage() {
         >
           + New Chat
         </button>
+
         <div style={{ color: "#94a3b8", fontSize: "14px" }}>Chats</div>
       </div>
 
@@ -295,7 +309,7 @@ export default function ChatPage() {
             justifyContent: "space-between",
           }}
         >
-          <div style={{ fontWeight: 600 }}>DataTrust Retrieval Planner</div>
+          <div style={{ fontWeight: 600 }}>DataTrust Secure Assistant</div>
           <div>
             <Pill>Department: TECH</Pill>
             <Pill>Level: L2</Pill>
@@ -305,19 +319,19 @@ export default function ChatPage() {
         <div style={{ flex: 1, overflowY: "auto", padding: "24px" }}>
           {messages.length === 0 && (
             <div style={{ color: "#94a3b8", maxWidth: "700px" }}>
-              Ask about internal knowledge and the system will generate a policy-aware retrieval plan
-              based on your department and authorization level.
+              Ask a question about authorized internal content. DataTrust will evaluate policy,
+              retrieve only approved sources, and generate a guarded answer.
             </div>
           )}
 
           {messages.map((message, idx) => (
             <div key={idx} style={{ marginBottom: "20px" }}>
-              {message.type === "user" ? (
+              {message.type === "user" && (
                 <div
                   style={{
                     marginLeft: "auto",
                     maxWidth: "720px",
-                    background: "#1d4ed8",
+                    background: "#2563eb",
                     color: "white",
                     padding: "14px 16px",
                     borderRadius: "16px",
@@ -325,13 +339,30 @@ export default function ChatPage() {
                 >
                   {message.text}
                 </div>
-              ) : (
-                <SystemPlanCard plan={message.plan} />
+              )}
+
+              {message.type === "blocked" && <BlockedMessageCard data={message.data} />}
+
+              {message.type === "answer" && <AnswerCard data={message.data} />}
+
+              {message.type === "system" && (
+                <div
+                  style={{
+                    maxWidth: "720px",
+                    background: "#1f2937",
+                    color: "#e5e7eb",
+                    padding: "14px 16px",
+                    borderRadius: "16px",
+                  }}
+                >
+                  {message.text}
+                </div>
               )}
             </div>
           ))}
 
-          {loading && <div style={{ color: "#94a3b8" }}>Planning retrieval...</div>}
+          {loading && <div style={{ color: "#94a3b8" }}>Processing request...</div>}
+
           {error && (
             <div
               style={{
@@ -369,7 +400,7 @@ export default function ChatPage() {
               color: "#111827",
               resize: "none",
             }}
-            placeholder="Ask about internal documents, repositories, or pages..."
+            placeholder="Ask about internal documents, repositories, or knowledge..."
           />
           <button
             onClick={handleSend}
