@@ -11,7 +11,8 @@ export async function getRetrievalPlan(userId: string, text: string) {
   });
 
   if (!res.ok) {
-    throw new Error("Failed to get retrieval plan");
+    const errText = await res.text();
+    throw new Error(`Failed to get retrieval plan: ${res.status} ${errText}`);
   }
 
   return res.json();
