@@ -6,6 +6,7 @@ from app.routers.analyze import router as analyze_router
 from app.routers.retrieval import router as retrieval_router
 from app.routers.ingestion import router as ingestion_router
 from app.routers.verification import router as verification_router
+from app.routers.chat import router as chat_router  
 
 app = FastAPI(title="DataTrust Backend")
 
@@ -27,3 +28,4 @@ app.include_router(analyze_router, tags=["policy"])
 app.include_router(retrieval_router, tags=["retrieval"])
 app.include_router(ingestion_router, tags=["ingestion"])
 app.include_router(verification_router, tags=["verification"])
+app.include_router(chat_router, tags=["chat"])

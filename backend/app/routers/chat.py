@@ -1,0 +1,164 @@
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import JSONResponse
+import uuid
+
+from app.core.security import get_current_user_id
+from app.models.chat_models import ChatRequest
+from app.services.authz_service import get_user_context
+from app.services.request_understanding_service import understand_request
+from app.services.policy_service import analyze_text
+from app.services.vector_retrieval_service import retrieve_authorized_chunks
+from app.services.generation_service import generate_answer_with_ollama
+from app.services.output_guard_service import validate_generated_answer
+from app.services.audit_service import log_policy_event
+
+
+router = APIRouter()
+
+
+@router.post("/chat")
+def guarded_chat(request: ChatRequest, user_id: str = Depends(get_current_user_id)):
+    request_id = str(uuid.uuid4())
+
+    try:
+        user_context = get_user_context(user_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"User context error: {str(e)}")
+
+    understanding = understand_request(request.text)
+
+    # reuse your existing deterministic policy engine
+    policy_result = analyze_text(understanding["normalized_text"], user_context)
+
+    blocked_response = {
+        "status": "blocked",
+        "answer": None,
+        "policy": {
+            "status": policy_result["status"],
+            "decision": policy_result["decision"],
+            "code": policy_result.get("code"),
+            "reason_category": policy_result.get("reason_category"),
+            "user_safe_explanation": policy_result.get("user_safe_explanation"),
+            "suggested_safe_alternative": policy_result.get("suggested_safe_alternative"),
+            "matched_rules": policy_result["matched_rules"],
+            "categories": understanding["categories"],
+            "action": understanding["action"],
+            "risk_level": policy_result["risk_level"],
+            "risk_score": policy_result["risk_score"],
+        },
+        "selected_sources": [],
+        "source_references": [],
+        "retrieval_count": 0,
+        "metadata": {
+            "request_id": request_id,
+            "normalized_text": understanding["normalized_text"],
+            "prompt_injection_hits": understanding["prompt_injection_hits"],
+        },
+    }
+
+    if policy_result["status"] == "blocked":
+        log_policy_event(
+            event_type="CHAT_BLOCKED_BY_POLICY",
+            payload={
+                "request_id": request_id,
+                "user_id": user_context["user_id"],
+                "query": request.text,
+                "normalized_text": understanding["normalized_text"],
+                "categories": understanding["categories"],
+                "action": understanding["action"],
+                "policy": policy_result,
+            }
+        )
+        return JSONResponse(status_code=403, content=blocked_response)
+
+    retrieval = retrieve_authorized_chunks(request.text, user_context, top_k=request.top_k)
+    chunks = retrieval["chunks"]
+
+    if not chunks:
+        response = {
+            "status": "clarify",
+            "answer": "I could not find authorized internal content for that request. Try narrowing the request to a known department-approved resource or document type.",
+            "policy": {
+                "status": policy_result["status"],
+                "decision": policy_result["decision"],
+                "code": None,
+                "reason_category": None,
+                "user_safe_explanation": None,
+                "suggested_safe_alternative": "Ask for a specific repo, page tree, runbook, or internal document within your approved scope.",
+                "matched_rules": policy_result["matched_rules"],
+                "categories": understanding["categories"],
+                "action": understanding["action"],
+                "risk_level": policy_result["risk_level"],
+                "risk_score": policy_result["risk_score"],
+            },
+            "selected_sources": retrieval["selected_sources"],
+            "source_references": [],
+            "retrieval_count": 0,
+            "metadata": {
+                "request_id": request_id,
+                "normalized_text": understanding["normalized_text"],
+                "selection_reasoning": retrieval["selection_reasoning"],
+            },
+        }
+
+        log_policy_event(
+            event_type="CHAT_NO_AUTHORIZED_CONTEXT",
+            payload=response
+        )
+        return response
+
+    answer = generate_answer_with_ollama(user_context, request.text, chunks)
+    output_check = validate_generated_answer(answer)
+
+    final_status = "allowed" if output_check["status"] == "clean" else "allowed_with_redaction"
+
+    response = {
+        "status": final_status,
+        "answer": output_check["answer"],
+        "policy": {
+            "status": policy_result["status"],
+            "decision": policy_result["decision"],
+            "code": None,
+            "reason_category": None,
+            "user_safe_explanation": None,
+            "suggested_safe_alternative": None,
+            "matched_rules": policy_result["matched_rules"],
+            "categories": understanding["categories"],
+            "action": understanding["action"],
+            "risk_level": policy_result["risk_level"],
+            "risk_score": policy_result["risk_score"],
+        },
+        "selected_sources": retrieval["selected_sources"],
+        "source_references": [
+            {
+                "chunk_id": c["chunk_id"],
+                "document_id": c["document_id"],
+                "title": c["title"],
+                "resource_path": c["resource_path"],
+                "source_type": c["source_type"],
+                "resource_name": c["resource_name"],
+                "score": c["score"],
+            }
+            for c in chunks
+        ],
+        "retrieval_count": len(chunks),
+        "metadata": {
+            "request_id": request_id,
+            "normalized_text": understanding["normalized_text"],
+            "selection_reasoning": retrieval["selection_reasoning"],
+            "output_validation": output_check["status"],
+            "output_hits": output_check["hits"],
+        },
+    }
+
+    log_policy_event(
+        event_type="CHAT_GENERATED_RESPONSE",
+        payload={
+            "request_id": request_id,
+            "user_id": user_context["user_id"],
+            "query": request.text,
+            "response": response,
+        }
+    )
+
+    return response
