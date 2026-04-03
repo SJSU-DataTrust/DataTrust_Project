@@ -71,8 +71,20 @@ def guarded_chat(request: ChatRequest, user_id: str = Depends(get_current_user_i
         )
         return JSONResponse(status_code=403, content=blocked_response)
 
-    retrieval = retrieve_authorized_chunks(request.text, user_context, top_k=request.top_k)
-    chunks = retrieval["chunks"]
+    try:
+        retrieval = retrieve_authorized_chunks(request.text, user_context, top_k=request.top_k)
+        chunks = retrieval["chunks"]
+    except Exception as e:
+        log_policy_event(
+            event_type="CHAT_RETRIEVAL_ERROR",
+            payload={
+                "request_id": request_id,
+                "user_id": user_context["user_id"],
+                "query": request.text,
+                "error": str(e),
+            }
+        )
+        raise HTTPException(status_code=500, detail=f"Retrieval error: {str(e)}")
 
     if not chunks:
         response = {
