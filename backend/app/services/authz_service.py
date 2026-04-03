@@ -27,7 +27,7 @@ def get_user_context(user_id: str) -> dict:
         logger.error("USER_NOT_FOUND user_id=%s", user_id)
         raise ValueError("User not found in app_users")
 
-    logger.info("USER_CONTEXT_RESOLVED user_context=%s", context)
+    logger.info("USER_CONTEXT_RESOLVED user_context")
 
     return {
         "user_id": data["id"],

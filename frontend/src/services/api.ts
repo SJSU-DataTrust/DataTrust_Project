@@ -44,3 +44,30 @@ export async function analyzePrompt(userId: string, text: string) {
 
   return { blocked: false, data };
 }
+
+export async function sendChat(userId: string, text: string) {
+  const res = await fetch(`${BACKEND_URL}/chat`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-User-Id": userId,
+    },
+    body: JSON.stringify({ text, top_k: 5 }),
+  });
+
+  const data = await res.json();
+
+  if (res.status === 401) {
+    throw new Error("AUTH_REQUIRED");
+  }
+
+  if (res.status === 403) {
+    return { blocked: true, data };
+  }
+
+  if (!res.ok) {
+    throw new Error(data?.detail || "Chat request failed");
+  }
+
+  return { blocked: false, data };
+}
