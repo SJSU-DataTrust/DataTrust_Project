@@ -28,46 +28,25 @@ def guarded_chat(request: ChatRequest, user_id: str = Depends(get_current_user_i
     understanding = understand_request(request.text)
 
     # reuse your existing deterministic policy engine
-    policy_result = analyze_text(understanding["normalized_text"], user_context)
+        policy_result = analyze_text(understanding["normalized_text"], user_context)
 
     categories = understanding["categories"]
     action = understanding["action"]
     normalized_text = understanding["normalized_text"]
 
-    # Semantic policy overrides
+    # Prompt injection
     if "PROMPT_INJECTION" in categories:
         policy_result["status"] = "blocked"
         policy_result["decision"] = "block"
         policy_result["code"] = "POLICY_DENIED"
         policy_result["reason_category"] = "PROMPT_INJECTION"
         policy_result["user_safe_explanation"] = "This request appears to attempt policy bypass or hidden instruction access."
-        policy_result["suggested_safe_alternative"] = "Ask a normal scoped question about approved internal resources."
+        policy_result["suggested_safe_alternative"] = "Ask a scoped question about approved internal resources."
         policy_result["matched_rules"] = list(set(policy_result["matched_rules"] + ["PROMPT_INJECTION"]))
         policy_result["risk_level"] = "high"
         policy_result["risk_score"] = max(policy_result["risk_score"], 85)
 
-    # Block source code externalization / external AI usage
-    if (
-        "SOURCE_CODE" in categories
-        and (
-            "EXTERNAL_SHARING" in categories
-            or action == "upload_to_external_ai"
-            or " into ai" in normalized_text
-            or " external_ai" in normalized_text
-            or " into external_ai" in normalized_text
-        )
-    ):
-        policy_result["status"] = "blocked"
-        policy_result["decision"] = "block"
-        policy_result["code"] = "POLICY_DENIED"
-        policy_result["reason_category"] = "SOURCE_CODE_EXTERNALIZATION"
-        policy_result["user_safe_explanation"] = "Uploading or sharing internal source code with external AI tools is restricted."
-        policy_result["suggested_safe_alternative"] = "Ask for an internal architecture summary or a scoped explanation using approved internal sources."
-        policy_result["matched_rules"] = list(set(policy_result["matched_rules"] + ["EXTERNAL_AI_RISK", "SOURCE_CODE_EXTERNALIZATION"]))
-        policy_result["risk_level"] = "high"
-        policy_result["risk_score"] = max(policy_result["risk_score"], 90)
-
-    # Block high sensitivity personal data requests
+    # Sensitive personal data
     if "PII_HIGH" in categories:
         policy_result["status"] = "blocked"
         policy_result["decision"] = "block"
@@ -79,7 +58,7 @@ def guarded_chat(request: ChatRequest, user_id: str = Depends(get_current_user_i
         policy_result["risk_level"] = "high"
         policy_result["risk_score"] = max(policy_result["risk_score"], 85)
 
-    # Block credentials/secrets requests
+    # Credentials and secrets
     if "CREDENTIALS" in categories:
         policy_result["status"] = "blocked"
         policy_result["decision"] = "block"
@@ -88,6 +67,26 @@ def guarded_chat(request: ChatRequest, user_id: str = Depends(get_current_user_i
         policy_result["user_safe_explanation"] = "Credentials, secrets, and private keys cannot be disclosed."
         policy_result["suggested_safe_alternative"] = "Ask for a high-level explanation without sensitive values."
         policy_result["matched_rules"] = list(set(policy_result["matched_rules"] + ["CREDENTIALS"]))
+        policy_result["risk_level"] = "high"
+        policy_result["risk_score"] = max(policy_result["risk_score"], 90)
+
+    # Source code + external AI / externalization
+    if (
+        "SOURCE_CODE" in categories
+        and (
+            "EXTERNAL_SHARING" in categories
+            or action == "upload_to_external_ai"
+            or " into ai" in normalized_text
+            or " external_ai" in normalized_text
+        )
+    ):
+        policy_result["status"] = "blocked"
+        policy_result["decision"] = "block"
+        policy_result["code"] = "POLICY_DENIED"
+        policy_result["reason_category"] = "SOURCE_CODE_EXTERNALIZATION"
+        policy_result["user_safe_explanation"] = "Uploading or sharing internal source code with external AI tools is restricted."
+        policy_result["suggested_safe_alternative"] = "Ask for an internal architecture summary or a scoped explanation using approved internal sources."
+        policy_result["matched_rules"] = list(set(policy_result["matched_rules"] + ["EXTERNAL_AI_RISK", "SOURCE_CODE_EXTERNALIZATION"]))
         policy_result["risk_level"] = "high"
         policy_result["risk_score"] = max(policy_result["risk_score"], 90)
 
