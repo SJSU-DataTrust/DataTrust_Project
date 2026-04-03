@@ -30,9 +30,9 @@ PROMPT_INJECTION_PATTERNS = [
 CATEGORY_RULES = {
     "PII_HIGH": ["ssn", "tax_id", "identity_number", "payroll", "salary", "employee review", "employee data"],
     "CREDENTIALS": ["password", "token", "secret", "api key", "private key", "credential"],
-    "SOURCE_CODE": ["source_code", "repo", "git", "architecture decision record", "root cause analysis"],
-    "INTERNAL_DOCS": ["internal docs", "internal documents", "runbook", "confluence", "private docs"],
-    "EXTERNAL_SHARING": ["external_ai", "upload", "share externally", "send externally", "paste externally"],
+    "SOURCE_CODE": ["source_code", "repo", "git", "architecture decision record", "root cause analysis", "code"],
+    "INTERNAL_DOCS": ["internal docs", "internal documents", "runbook", "confluence", "private docs", "document"],
+    "EXTERNAL_SHARING": ["external_ai", "ai", "upload", "share externally", "send externally", "paste externally", "send to", "put into"],
     "ADMIN_ACTION": ["all logs", "all users", "all audit records", "download policy logs"],
 }
 
@@ -76,19 +76,30 @@ def classify_categories(normalized: str) -> List[str]:
         if any(phrase in normalized for phrase in phrases):
             categories.append(category)
 
-    if "external_ai" in normalized and "source_code" in normalized:
-        if "EXTERNAL_SHARING" not in categories:
-            categories.append("EXTERNAL_SHARING")
+    if ("source_code" in normalized or "repo" in normalized or "code" in normalized) and ("ai" in normalized or "external_ai" in normalized):
         if "SOURCE_CODE" not in categories:
             categories.append("SOURCE_CODE")
+        if "EXTERNAL_SHARING" not in categories:
+            categories.append("EXTERNAL_SHARING")
+
+    if "ssn" in normalized:
+        if "PII_HIGH" not in categories:
+            categories.append("PII_HIGH")
 
     return categories or ["BENIGN_INFORMATIONAL"]
 
 
 def detect_action(normalized: str) -> str:
+    if (
+        ("upload" in normalized or "paste" in normalized or "send" in normalized or "share" in normalized or "put" in normalized)
+        and ("external_ai" in normalized or " ai" in normalized)
+    ):
+        return "upload_to_external_ai"
+
     for action, phrases in ACTION_RULES.items():
         if any(phrase in normalized for phrase in phrases):
             return action
+
     return "answer"
 
 
