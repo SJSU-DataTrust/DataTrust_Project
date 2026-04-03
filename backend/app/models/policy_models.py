@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 
 class AnalyzeRequest(BaseModel):
@@ -7,6 +7,7 @@ class AnalyzeRequest(BaseModel):
 
 
 class PolicyResult(BaseModel):
+    status: str
     decision: str
     risk_level: str
     risk_score: int
@@ -14,6 +15,10 @@ class PolicyResult(BaseModel):
     pii_hits: List[str]
     keyword_hits: List[str]
     redacted_text: str
+    code: Optional[str] = None
+    reason_category: Optional[str] = None
+    user_safe_explanation: Optional[str] = None
+    suggested_safe_alternative: Optional[str] = None
 
 
 class AnalyzeResponse(BaseModel):

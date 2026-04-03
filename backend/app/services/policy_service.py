@@ -230,8 +230,38 @@ def analyze_text(text: str, user_context: dict) -> dict:
     print("DEBUG decision returned:", decision)
 
     redacted_text = redact_text(text)
+    blocked = decision == "block"
+
+    code = None
+    reason_category = None
+    user_safe_explanation = None
+    suggested_safe_alternative = None
+
+    if blocked:
+        code = "POLICY_DENIED"
+
+        if "OUT_OF_SCOPE_ACCESS" in matched_rules:
+            reason_category = "OUT_OF_SCOPE_ACCESS"
+            user_safe_explanation = "This request is outside your department or authorization scope."
+            suggested_safe_alternative = "Ask for a summary of resources within your approved department and level."
+
+        elif "EXTERNAL_AI_RISK" in matched_rules:
+            reason_category = "SOURCE_CODE_EXTERNALIZATION"
+            user_safe_explanation = "Uploading or sharing internal material with external AI tools is restricted."
+            suggested_safe_alternative = "Ask for an internal summary using approved company data sources."
+
+        elif any(rule.startswith("PII_") for rule in matched_rules):
+            reason_category = "SENSITIVE_PERSONAL_DATA"
+            user_safe_explanation = "This request involves restricted personal data."
+            suggested_safe_alternative = "Request a redacted or aggregated summary if your role allows it."
+
+        else:
+            reason_category = "RESTRICTED_REQUEST"
+            user_safe_explanation = "This request is restricted by policy."
+            suggested_safe_alternative = "Rephrase the request to ask for a scoped summary or approved internal documentation."
 
     return {
+        "status": "blocked" if blocked else "allowed",
         "decision": decision,
         "risk_level": risk_level,
         "risk_score": risk_score,
@@ -239,6 +269,10 @@ def analyze_text(text: str, user_context: dict) -> dict:
         "pii_hits": pii_hits,
         "keyword_hits": keyword_hits,
         "redacted_text": redacted_text,
+        "code": code,
+        "reason_category": reason_category,
+        "user_safe_explanation": user_safe_explanation,
+        "suggested_safe_alternative": suggested_safe_alternative,
         "user_context_snapshot": {
             "user_id": user_context["user_id"],
             "department": user_context["department"],
