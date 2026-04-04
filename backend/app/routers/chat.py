@@ -28,7 +28,7 @@ def guarded_chat(request: ChatRequest, user_id: str = Depends(get_current_user_i
     understanding = understand_request(request.text)
 
     # reuse your existing deterministic policy engine
-        policy_result = analyze_text(understanding["normalized_text"], user_context)
+    policy_result = analyze_text(understanding["normalized_text"], user_context)
 
     categories = understanding["categories"]
     action = understanding["action"]

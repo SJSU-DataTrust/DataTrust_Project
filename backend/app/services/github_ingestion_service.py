@@ -113,6 +113,7 @@ def ingest_mock_github_document(user_context: dict | None = None) -> dict:
             "resource_scope_id": resource_scope[0]["id"],
             "department_id": department["id"],
             "min_auth_level_id": auth_level["id"],
+            "is_active": True,
             "resource_path": "datatrust/public-docs/docs/backend-architecture.md",
             "metadata": {
                 "repo": "datatrust-public-docs",
