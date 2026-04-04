@@ -42,6 +42,24 @@ def deactivate_chunks_for_document(document_id: int):
     }).eq("document_id", document_id).execute()
 
 
+def reactivate_chunks_for_document(document_id: int):
+    supabase.table("document_chunks").update({
+        "is_active": True,
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }).eq("document_id", document_id).execute()
+
+
+def get_active_chunk_count_for_document(document_id: int) -> int:
+    result = (
+        supabase.table("document_chunks")
+        .select("id", count="exact")
+        .eq("document_id", document_id)
+        .eq("is_active", True)
+        .execute()
+    )
+    return result.count or 0
+
+
 def upsert_chunk(chunk_payload: dict):
     payload = {
         **chunk_payload,

@@ -6,6 +6,8 @@ from app.services.document_service import (
     get_document_by_source,
     upsert_document,
     deactivate_chunks_for_document,
+    reactivate_chunks_for_document,
+    get_active_chunk_count_for_document,
     upsert_chunk,
 )
 from app.services.sync_service import log_sync_event, upsert_connector_sync_state
@@ -42,8 +44,18 @@ def ingest_mock_github_document(user_context: dict | None = None) -> dict:
 
     existing_document = get_document_by_source(source_system["id"], external_doc_id)
 
-    # Idempotent no-op if content hasn't changed
     if existing_document and existing_document.get("content_hash") == content_hash:
+        active_chunk_count = get_active_chunk_count_for_document(existing_document["id"])
+
+        # no change, but reactivate chunks if they were previously deactivated
+        if active_chunk_count == 0:
+            reactivate_chunks_for_document(existing_document["id"])
+
+            log_sync_event("MOCK_GITHUB_INGESTION_REACTIVATED_CHUNKS", {
+                "document_id": existing_document["id"],
+                "external_doc_id": external_doc_id,
+            })
+
         upsert_connector_sync_state({
             "source_system_id": source_system["id"],
             "external_doc_id": external_doc_id,
@@ -65,7 +77,7 @@ def ingest_mock_github_document(user_context: dict | None = None) -> dict:
         return {
             "document_id": existing_document["id"],
             "external_doc_id": external_doc_id,
-            "chunk_count": 0,
+            "chunk_count": active_chunk_count,
             "content_hash": content_hash,
             "status": "no_change",
         }
@@ -94,7 +106,6 @@ def ingest_mock_github_document(user_context: dict | None = None) -> dict:
 
     document_id = document["id"]
 
-    # Only deactivate old chunks when content changed
     deactivate_chunks_for_document(document_id)
 
     chunks = chunk_text(normalized, chunk_size_words=120, overlap_words=20)
