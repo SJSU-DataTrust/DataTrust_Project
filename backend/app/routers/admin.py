@@ -1,6 +1,4 @@
-from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
-
 from app.core.security import get_current_user_id
 from app.services.authz_service import get_user_context
 from app.db.supabase_client import supabase
@@ -20,7 +18,6 @@ def require_admin(user_id: str):
 def admin_summary(user_id: str = Depends(get_current_user_id)):
     admin_user = require_admin(user_id)
 
-    # Supabase counts
     documents_result = supabase.table("documents").select("id", count="exact").execute()
     active_chunks_result = (
         supabase.table("document_chunks")
@@ -31,7 +28,6 @@ def admin_summary(user_id: str = Depends(get_current_user_id)):
     scopes_result = supabase.table("resource_scopes").select("id", count="exact").execute()
     users_result = supabase.table("app_users").select("id", count="exact").execute()
 
-    # Mongo counts
     blocked_count = audit_logs.count_documents({
         "$or": [
             {"payload.result.status": "blocked"},
@@ -53,6 +49,7 @@ def admin_summary(user_id: str = Depends(get_current_user_id)):
                 "MOCK_GITHUB_INGESTION_SUCCESS",
                 "REAL_GITHUB_FILE_INGESTED",
                 "LOCAL_FILE_INGESTED",
+                "MOCK_GITHUB_INGESTION_REACTIVATED_CHUNKS",
             ]
         }
     })
@@ -91,7 +88,6 @@ def admin_recent_blocked(user_id: str = Depends(get_current_user_id)):
             },
             {
                 "event_type": 1,
-                "payload.request_id": 1,
                 "payload.user.email": 1,
                 "payload.user.department": 1,
                 "payload.user.auth_level": 1,
@@ -116,7 +112,7 @@ def admin_recent_blocked(user_id: str = Depends(get_current_user_id)):
 
         result.append({
             "event_type": d.get("event_type"),
-            "created_at": d.get("created_at"),
+            "created_at": str(d.get("created_at")),
             "email": user.get("email"),
             "department": user.get("department"),
             "auth_level": user.get("auth_level"),
@@ -152,7 +148,7 @@ def admin_recent_events(user_id: str = Depends(get_current_user_id)):
         payload = d.get("payload", {})
         result.append({
             "event_type": d.get("event_type"),
-            "created_at": d.get("created_at"),
+            "created_at": str(d.get("created_at")),
             "summary": {
                 "external_doc_id": payload.get("external_doc_id"),
                 "chunk_count": payload.get("chunk_count"),
@@ -200,7 +196,7 @@ def admin_recent_chat(user_id: str = Depends(get_current_user_id)):
         response = payload.get("response", {})
         result.append({
             "event_type": d.get("event_type"),
-            "created_at": d.get("created_at"),
+            "created_at": str(d.get("created_at")),
             "request_id": payload.get("request_id"),
             "user_id": payload.get("user_id"),
             "query": payload.get("query"),
@@ -208,3 +204,58 @@ def admin_recent_chat(user_id: str = Depends(get_current_user_id)):
         })
 
     return result
+
+
+@router.get("/admin/chart-data")
+def admin_chart_data(user_id: str = Depends(get_current_user_id)):
+    require_admin(user_id)
+
+    blocked_count = audit_logs.count_documents({
+        "$or": [
+            {"payload.result.status": "blocked"},
+            {"payload.response.status": "blocked"},
+        ]
+    })
+
+    generated_count = audit_logs.count_documents({
+        "event_type": "CHAT_GENERATED_RESPONSE"
+    })
+
+    no_context_count = audit_logs.count_documents({
+        "event_type": "CHAT_NO_AUTHORIZED_CONTEXT"
+    })
+
+    documents = supabase.table("documents").select("department_id").execute().data or []
+    departments = supabase.table("departments").select("id,code").execute().data or []
+
+    dept_map = {d["id"]: d["code"] for d in departments}
+    department_counts = {}
+    for doc in documents:
+        dept_code = dept_map.get(doc.get("department_id"), "UNKNOWN")
+        department_counts[dept_code] = department_counts.get(dept_code, 0) + 1
+
+    event_types = [
+        "LOCAL_FILE_INGESTED",
+        "MOCK_GITHUB_INGESTION_SUCCESS",
+        "REAL_GITHUB_FILE_INGESTED",
+        "MOCK_GITHUB_INGESTION_REACTIVATED_CHUNKS",
+    ]
+    event_counts = {}
+    for event_type in event_types:
+        event_counts[event_type] = system_events.count_documents({"event_type": event_type})
+
+    return {
+        "request_outcomes": [
+            {"label": "Blocked", "value": blocked_count},
+            {"label": "Generated", "value": generated_count},
+            {"label": "No Context", "value": no_context_count},
+        ],
+        "documents_by_department": [
+            {"label": key, "value": value}
+            for key, value in department_counts.items()
+        ],
+        "ingestion_events": [
+            {"label": key, "value": value}
+            for key, value in event_counts.items()
+        ],
+    }

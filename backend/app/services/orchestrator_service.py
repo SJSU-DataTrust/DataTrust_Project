@@ -85,16 +85,35 @@ def build_retrieval_plan(query: str, user_context: dict) -> dict:
     allowed_scopes = get_allowed_resource_scopes(user_context)
     selected_sources, reasoning = choose_sources(query, allowed_scopes, user_context)
 
+    # Filter scopes by selected sources only
+    selected_scopes = [
+        scope for scope in allowed_scopes
+        if scope["source_type"] in selected_sources
+    ]
+
+    confluence_scopes = [
+        scope for scope in selected_scopes
+        if scope["source_type"] == "CONFLUENCE"
+    ]
+    github_scopes = [
+        scope for scope in selected_scopes
+        if scope["source_type"] == "GITHUB"
+    ]
+    gdrive_scopes = [
+        scope for scope in selected_scopes
+        if scope["source_type"] == "GDRIVE"
+    ]
+
     source_plans = []
 
-    if "CONFLUENCE" in selected_sources:
-        source_plans.append(search_confluence(query, allowed_scopes))
+    if "CONFLUENCE" in selected_sources and confluence_scopes:
+        source_plans.append(search_confluence(query, confluence_scopes))
 
-    if "GITHUB" in selected_sources:
-        source_plans.append(search_github(query, allowed_scopes))
+    if "GITHUB" in selected_sources and github_scopes:
+        source_plans.append(search_github(query, github_scopes))
 
-    if "GDRIVE" in selected_sources:
-        source_plans.append(search_gdrive(query, allowed_scopes))
+    if "GDRIVE" in selected_sources and gdrive_scopes:
+        source_plans.append(search_gdrive(query, gdrive_scopes))
 
     blocked_sources = []
     all_source_types = {"CONFLUENCE", "GITHUB", "GDRIVE"}
@@ -106,26 +125,6 @@ def build_retrieval_plan(query: str, user_context: dict) -> dict:
             })
 
     return {
-        # "query": query,
-        # "status": "planned",
-        # "summary": {
-        #     "message": "Retrieval plan created successfully.",
-        #     "selected_source_count": len(selected_sources),
-        #     "allowed_scope_count": len(allowed_scopes),
-        # },
-        # "user_context": {
-        #     "user_id": user_context["user_id"],
-        #     "department": user_context["department"],
-        #     "auth_level": user_context["auth_level"],
-        #     "auth_rank": user_context["auth_rank"],
-        # },
-        # "selected_sources": selected_sources,
-        # "selection_reasoning": reasoning,
-        # "allowed_scope_count": len(allowed_scopes),
-        # "allowed_scopes": allowed_scopes,
-        # "blocked_sources": blocked_sources,
-        # "source_plan_count": len(source_plans),
-        # "source_plans": source_plans,
         "query": query,
         "status": "planned",
         "summary": {
@@ -143,7 +142,7 @@ def build_retrieval_plan(query: str, user_context: dict) -> dict:
         "selection_reasoning": reasoning,
         "allowed_scope_count": len(allowed_scopes),
         "allowed_scopes": allowed_scopes,
-        "blocked_sources": [],
+        "blocked_sources": blocked_sources,
         "source_plan_count": len(source_plans),
         "source_plans": source_plans,
     }

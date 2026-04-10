@@ -63,21 +63,21 @@ const DEMO_USERS: DemoUser[] = [
   {
     key: "tech-l3",
     label: "Tech L3",
-    userId: "a9f4626e-391e-48b9-9134-8f95863d4601", // replace with real UUID if needed
+    userId: "a9f4626e-391e-48b9-9134-8f95863d4601",
     department: "TECH",
     level: "L3",
   },
   {
     key: "hr-l1",
     label: "HR L1",
-    userId: "1edab7be-5f84-4334-aedb-6046eafb7263", // replace with real UUID if needed
+    userId: "1edab7be-5f84-4334-aedb-6046eafb7263",
     department: "HR",
     level: "L1",
   },
   {
     key: "hr-l3",
     label: "HR L3",
-    userId: "2e857853-a2a9-4334-be36-4861e6aba2cc", // replace with real UUID if needed
+    userId: "2e857853-a2a9-4334-be36-4861e6aba2cc",
     department: "HR",
     level: "L3",
   },
@@ -105,7 +105,7 @@ function Pill({
         color,
         border: `1px solid ${border}`,
         fontSize: "12px",
-        fontWeight: 500,
+        fontWeight: 600,
         marginRight: "8px",
         marginBottom: "8px",
       }}
@@ -115,7 +115,7 @@ function Pill({
   );
 }
 
-function Card({
+function SectionCard({
   title,
   children,
 }: {
@@ -126,16 +126,16 @@ function Card({
     <div
       style={{
         marginTop: "14px",
-        borderRadius: "16px",
-        border: "1px solid #243041",
-        background: "#0f172a",
+        borderRadius: "18px",
+        border: "1px solid #223046",
+        background: "rgba(15, 23, 42, 0.88)",
         padding: "14px",
       }}
     >
       <div
         style={{
           fontSize: "13px",
-          fontWeight: 700,
+          fontWeight: 800,
           color: "#cbd5e1",
           marginBottom: "10px",
           letterSpacing: "0.02em",
@@ -166,7 +166,7 @@ function SidebarButton({
         background: "linear-gradient(180deg, #111827 0%, #0b1220 100%)",
         color: "#f8fafc",
         cursor: "pointer",
-        fontWeight: 600,
+        fontWeight: 700,
       }}
     >
       {children}
@@ -178,20 +178,20 @@ function BlockedMessageCard({ data }: { data: ChatApiResponse }) {
   return (
     <div
       style={{
-        maxWidth: "900px",
+        maxWidth: "920px",
         background: "linear-gradient(180deg, #2b1218 0%, #1f0d12 100%)",
         border: "1px solid #7f1d1d",
-        borderRadius: "20px",
+        borderRadius: "22px",
         padding: "18px",
         color: "#fee2e2",
         boxShadow: "0 8px 30px rgba(0,0,0,0.2)",
       }}
     >
-      <div style={{ fontSize: "16px", fontWeight: 800, marginBottom: "12px" }}>
+      <div style={{ fontSize: "16px", fontWeight: 900, marginBottom: "12px" }}>
         Request blocked by policy
       </div>
 
-      <div style={{ marginBottom: "10px" }}>
+      <div style={{ marginBottom: "12px" }}>
         <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
           Decision: {data.policy.decision}
         </Pill>
@@ -203,7 +203,7 @@ function BlockedMessageCard({ data }: { data: ChatApiResponse }) {
         </Pill>
       </div>
 
-      <div style={{ color: "#ffe4e6", lineHeight: 1.6 }}>
+      <div style={{ color: "#ffe4e6", lineHeight: 1.65 }}>
         {data.policy.user_safe_explanation || "This request is restricted by policy."}
       </div>
 
@@ -223,7 +223,7 @@ function BlockedMessageCard({ data }: { data: ChatApiResponse }) {
       )}
 
       {data.policy.matched_rules?.length > 0 && (
-        <Card title="Matched policy rules">
+        <SectionCard title="Matched policy rules">
           <div>
             {data.policy.matched_rules.map((rule) => (
               <Pill
@@ -236,7 +236,7 @@ function BlockedMessageCard({ data }: { data: ChatApiResponse }) {
               </Pill>
             ))}
           </div>
-        </Card>
+        </SectionCard>
       )}
     </div>
   );
@@ -249,7 +249,7 @@ function AnswerCard({ data }: { data: ChatApiResponse }) {
         maxWidth: "920px",
         background: "linear-gradient(180deg, #0f172a 0%, #0b1325 100%)",
         border: "1px solid #243041",
-        borderRadius: "20px",
+        borderRadius: "22px",
         padding: "18px",
         color: "#e5e7eb",
         boxShadow: "0 8px 30px rgba(0,0,0,0.18)",
@@ -286,17 +286,17 @@ function AnswerCard({ data }: { data: ChatApiResponse }) {
       </div>
 
       {data.selected_sources?.length > 0 && (
-        <Card title="Selected sources">
+        <SectionCard title="Selected sources">
           <div>
             {data.selected_sources.map((source) => (
               <Pill key={source}>{source}</Pill>
             ))}
           </div>
-        </Card>
+        </SectionCard>
       )}
 
       {data.source_references?.length > 0 && (
-        <Card title="Source references">
+        <SectionCard title="Source references">
           <div style={{ display: "grid", gap: "10px" }}>
             {data.source_references.map((ref) => (
               <div
@@ -308,7 +308,7 @@ function AnswerCard({ data }: { data: ChatApiResponse }) {
                   padding: "12px",
                 }}
               >
-                <div style={{ fontWeight: 700, color: "#f8fafc" }}>
+                <div style={{ fontWeight: 800, color: "#f8fafc" }}>
                   {ref.resource_name || ref.title || `Chunk ${ref.chunk_id}`}
                 </div>
                 <div
@@ -328,7 +328,7 @@ function AnswerCard({ data }: { data: ChatApiResponse }) {
               </div>
             ))}
           </div>
-        </Card>
+        </SectionCard>
       )}
     </div>
   );
@@ -395,7 +395,7 @@ export default function ChatPage() {
     >
       <aside
         style={{
-          width: "290px",
+          width: "300px",
           borderRight: "1px solid #1e293b",
           padding: "22px",
           background: "rgba(2, 6, 23, 0.88)",
@@ -429,7 +429,7 @@ export default function ChatPage() {
 
         <div
           style={{
-            marginTop: "20px",
+            marginTop: "18px",
             padding: "14px",
             borderRadius: "16px",
             border: "1px solid #223046",
@@ -440,11 +440,11 @@ export default function ChatPage() {
             style={{
               marginBottom: "10px",
               fontSize: "13px",
-              fontWeight: 700,
+              fontWeight: 800,
               color: "#cbd5e1",
             }}
           >
-            Demo User
+            Demo user
           </div>
 
           <select
@@ -480,18 +480,14 @@ export default function ChatPage() {
               {activeUser.level}
             </Pill>
           </div>
-
-          <div style={{ marginTop: "10px", fontSize: "12px", color: "#94a3b8" }}>
-            UUID: {activeUser.userId}
-          </div>
         </div>
 
         <div style={{ marginTop: "20px", color: "#94a3b8", fontSize: "13px" }}>
-          Suggested demo prompts:
-          <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
+          Suggested prompts:
+          <div style={{ marginTop: "10px", display: "grid", gap: "8px", lineHeight: 1.5 }}>
             <div>• Summarize backend deployment architecture docs</div>
-            <div>• Give me all ssns</div>
             <div>• Show restricted architecture decisions</div>
+            <div>• Give me all ssns</div>
           </div>
         </div>
       </aside>
@@ -509,7 +505,7 @@ export default function ChatPage() {
           }}
         >
           <div>
-            <div style={{ fontWeight: 800, fontSize: "17px" }}>
+            <div style={{ fontWeight: 900, fontSize: "18px" }}>
               Secure Internal Assistant
             </div>
             <div style={{ marginTop: "4px", fontSize: "13px", color: "#94a3b8" }}>
