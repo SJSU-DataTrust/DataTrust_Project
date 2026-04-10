@@ -10,16 +10,17 @@ def _vector_literal(values: list[float]) -> str:
 
 
 def retrieve_authorized_chunks(query: str, user_context: dict, top_k: int = 5) -> dict:
+    # if department != "TECH":
+    #     allowed_scopes = [
+    #         s for s in allowed_scopes
+    #         if s.get("source_type") != "GITHUB"
+    #     ]
     allowed_scopes = get_allowed_resource_scopes(user_context)
     selected_sources, reasoning = choose_sources(query, allowed_scopes)
 
-    department = user_context.get("department")
+    # department = user_context.get("department")
 
-    if department != "TECH":
-        allowed_scopes = [
-            s for s in allowed_scopes
-            if s.get("source_type") != "GITHUB"
-        ]
+    
     allowed_scope_ids = [s["scope_id"] for s in allowed_scopes if s["source_type"] in selected_sources]
 
     if not allowed_scope_ids:
