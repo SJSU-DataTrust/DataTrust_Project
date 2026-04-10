@@ -44,6 +44,14 @@ KEYWORD_RULES = {
         "show engineering architecture docs",
         "show restricted source code",
         "show all audit logs",
+        "give me employee info",
+        "give me employee information",
+        "show employee info",
+        "show employee information",
+        "give me employee data",
+        "show employee data",
+        "give me employee details",
+        "show employee details",
     ],
     "SENSITIVE_SUMMARY": [
         "summarize internal customer records",
@@ -288,16 +296,25 @@ def detect_department_scope_violations(text: str, user_context: dict) -> list[st
     violations = []
 
     hr_terms = [
-        "salary",
-        "salary details",
-        "payroll",
-        "payroll records",
-        "employee payroll",
-        "employee ssn",
-        "employee review",
-        "employee reviews",
-        "hr records",
-        "compensation"
+    "salary",
+    "salary details",
+    "payroll",
+    "payroll records",
+    "employee payroll",
+    "employee ssn",
+    "employee ssns",
+    "employee review",
+    "employee reviews",
+    "hr records",
+    "compensation",
+    "employee info",
+    "employee information",
+    "employee data",
+    "employee details",
+    "personal data",
+    "personnel data",
+    "staff data",
+    "private employee data",
     ]
 
     tech_terms = [

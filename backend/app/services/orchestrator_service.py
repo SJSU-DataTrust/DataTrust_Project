@@ -15,8 +15,13 @@ def choose_sources(query: str, allowed_scopes: List[Dict], user_context: dict) -
     # HARD GUARD (prevents DB mistakes from leaking access)
     department = user_context.get("department")
 
+    print("DEBUG choose_sources department:", user_context.get("department"))
+    print("DEBUG choose_sources allowed_source_types BEFORE:", allowed_source_types)
+    
     if department != "TECH":
         allowed_source_types.discard("GITHUB")
+
+    print("DEBUG choose_sources allowed_source_types AFTER:", allowed_source_types)
     
     github_terms = [
         "repo", "repository", "code", "commit", "pull request", "pr",
