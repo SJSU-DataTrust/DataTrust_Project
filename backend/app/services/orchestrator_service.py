@@ -6,13 +6,18 @@ from app.services.connectors import search_confluence, search_github, search_gdr
 
 logger = logging.getLogger(__name__)
 
-def choose_sources(query: str, allowed_scopes: List[Dict]) -> tuple[List[str], List[str]]:
+def choose_sources(query: str, allowed_scopes: List[Dict], user_context: dict) -> tuple[List[str], List[str]]:
     lowered = query.lower()
     selected = set()
     reasoning = []
 
     allowed_source_types = {s["source_type"] for s in allowed_scopes}
+    # HARD GUARD (prevents DB mistakes from leaking access)
+    department = user_context.get("department")
 
+    if department != "TECH":
+        allowed_source_types.discard("GITHUB")
+    
     github_terms = [
         "repo", "repository", "code", "commit", "pull request", "pr",
         "architecture", "deployment", "backend", "frontend", "service",
@@ -73,7 +78,7 @@ def choose_sources(query: str, allowed_scopes: List[Dict]) -> tuple[List[str], L
 
 def build_retrieval_plan(query: str, user_context: dict) -> dict:
     allowed_scopes = get_allowed_resource_scopes(user_context)
-    selected_sources, reasoning = choose_sources(query, allowed_scopes)
+    selected_sources, reasoning = choose_sources(query, allowed_scopes, user_context)
 
     source_plans = []
 
