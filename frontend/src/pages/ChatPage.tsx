@@ -77,7 +77,7 @@ const DEMO_USERS: DemoUser[] = [
   {
     key: "hr-l3",
     label: "HR L3",
-    userId: "0cfa95fd-59fa-4465-81a4-75ac8d456ef5", // replace with real UUID if needed
+    userId: "2e857853-a2a9-4334-be36-4861e6aba2cc", // replace with real UUID if needed
     department: "HR",
     level: "L3",
   },
