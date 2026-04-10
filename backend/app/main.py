@@ -9,6 +9,7 @@ from app.routers.verification import router as verification_router
 from app.routers.chat import router as chat_router  
 from app.routers.debug import router as debug_router
 from app.routers.local_ingestion import router as local_ingestion_router
+from app.routers.admin import router as admin_router
 
 app = FastAPI(title="DataTrust Backend")
 
@@ -35,3 +36,4 @@ app.include_router(verification_router, tags=["verification"])
 app.include_router(chat_router, tags=["chat"])
 app.include_router(debug_router, tags=["debug"])
 app.include_router(local_ingestion_router, tags=["local-ingestion"])
+app.include_router(admin_router, tags=["admin"])
