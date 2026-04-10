@@ -8,6 +8,7 @@ from app.routers.ingestion import router as ingestion_router
 from app.routers.verification import router as verification_router
 from app.routers.chat import router as chat_router  
 from app.routers.debug import router as debug_router
+from app.routers.local_ingestion import router as local_ingestion_router
 
 app = FastAPI(title="DataTrust Backend")
 
@@ -16,7 +17,9 @@ app.add_middleware(
     allow_origins=[
         "http://136.111.123.202",
         "http://localhost:3000",
-        "http://localhost:5173"
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -31,3 +34,4 @@ app.include_router(ingestion_router, tags=["ingestion"])
 app.include_router(verification_router, tags=["verification"])
 app.include_router(chat_router, tags=["chat"])
 app.include_router(debug_router, tags=["debug"])
+app.include_router(local_ingestion_router, tags=["local-ingestion"])

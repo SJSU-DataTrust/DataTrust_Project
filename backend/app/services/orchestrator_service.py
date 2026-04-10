@@ -6,30 +6,68 @@ from app.services.connectors import search_confluence, search_github, search_gdr
 
 logger = logging.getLogger(__name__)
 
-def choose_sources(query: str, allowed_scopes: list[dict]) -> tuple[list[str], list[str]]:
+def choose_sources(query: str, allowed_scopes: List[Dict]) -> tuple[List[str], List[str]]:
     lowered = query.lower()
     selected = set()
     reasoning = []
 
-    if any(word in lowered for word in ["repo", "code", "commit", "pull request", "architecture", "deployment", "backend"]):
-        if any(s["source_type"] == "GITHUB" for s in allowed_scopes):
+    allowed_source_types = {s["source_type"] for s in allowed_scopes}
+
+    github_terms = [
+        "repo", "repository", "code", "commit", "pull request", "pr",
+        "architecture", "deployment", "backend", "frontend", "service",
+        "api", "implementation", "source code"
+    ]
+
+    confluence_terms = [
+        "policy", "page", "confluence", "documentation", "docs", "runbook",
+        "runbooks", "guide", "playbook", "procedure", "design doc", "architecture", "overview", "backend", "admin",
+        "architecture doc", "incident", "postmortem", "rca"
+    ]
+
+    gdrive_terms = [
+        "drive", "folder", "document", "slides", "file", "campaign",
+        "spreadsheet", "sheet", "presentation"
+    ]
+
+    github_match = any(term in lowered for term in github_terms)
+    confluence_match = any(term in lowered for term in confluence_terms)
+    gdrive_match = any(term in lowered for term in gdrive_terms)
+
+    if github_match and "GITHUB" in allowed_source_types:
+        selected.add("GITHUB")
+        reasoning.append("Selected GITHUB because the query appears repo/code/architecture-related.")
+
+    if confluence_match and "CONFLUENCE" in allowed_source_types:
+        selected.add("CONFLUENCE")
+        reasoning.append("Selected CONFLUENCE because the query appears documentation or page-oriented.")
+
+    if gdrive_match and "GDRIVE" in allowed_source_types:
+        selected.add("GDRIVE")
+        reasoning.append("Selected GDRIVE because the query appears document/file/folder-oriented.")
+
+    # Important: technical documentation often lives in both GitHub and Confluence
+    technical_doc_terms = [
+        "architecture", "deployment", "design", "runbook", "docs", "documentation",
+        "backend", "frontend", "service", "api", "incident", "rca"
+    ]
+
+    if any(term in lowered for term in technical_doc_terms):
+        if "GITHUB" in allowed_source_types:
             selected.add("GITHUB")
-            reasoning.append("GitHub selected because the query suggests code or architecture content.")
-
-    if any(word in lowered for word in ["policy", "page", "confluence", "documentation", "docs", "runbook"]):
-        if any(s["source_type"] == "CONFLUENCE" for s in allowed_scopes):
+        if "CONFLUENCE" in allowed_source_types:
             selected.add("CONFLUENCE")
-            reasoning.append("Confluence selected because the query suggests documentation or knowledge pages.")
 
-    if any(word in lowered for word in ["drive", "folder", "document", "slides", "file", "campaign"]):
-        if any(s["source_type"] == "GDRIVE" for s in allowed_scopes):
-            selected.add("GDRIVE")
-            reasoning.append("Google Drive selected because the query suggests document or folder-based content.")
+        if "GITHUB" in allowed_source_types and "CONFLUENCE" in allowed_source_types:
+            reasoning.append(
+                "Selected both GITHUB and CONFLUENCE because technical docs may exist in repos and wiki/runbook pages."
+            )
 
     if not selected:
-        selected = {s["source_type"] for s in allowed_scopes}
+        selected = allowed_source_types
         reasoning.append("No strong source hint found, so all allowed source types were selected.")
 
+    logger.info("SOURCE_SELECTION_DONE query=%r selected=%s reasoning=%s", query, list(selected), reasoning)
     return list(selected), reasoning
 
 
@@ -58,6 +96,26 @@ def build_retrieval_plan(query: str, user_context: dict) -> dict:
             })
 
     return {
+        # "query": query,
+        # "status": "planned",
+        # "summary": {
+        #     "message": "Retrieval plan created successfully.",
+        #     "selected_source_count": len(selected_sources),
+        #     "allowed_scope_count": len(allowed_scopes),
+        # },
+        # "user_context": {
+        #     "user_id": user_context["user_id"],
+        #     "department": user_context["department"],
+        #     "auth_level": user_context["auth_level"],
+        #     "auth_rank": user_context["auth_rank"],
+        # },
+        # "selected_sources": selected_sources,
+        # "selection_reasoning": reasoning,
+        # "allowed_scope_count": len(allowed_scopes),
+        # "allowed_scopes": allowed_scopes,
+        # "blocked_sources": blocked_sources,
+        # "source_plan_count": len(source_plans),
+        # "source_plans": source_plans,
         "query": query,
         "status": "planned",
         "summary": {
@@ -66,16 +124,16 @@ def build_retrieval_plan(query: str, user_context: dict) -> dict:
             "allowed_scope_count": len(allowed_scopes),
         },
         "user_context": {
-            "user_id": user_context["user_id"],
-            "department": user_context["department"],
-            "auth_level": user_context["auth_level"],
-            "auth_rank": user_context["auth_rank"],
+            "user_id": user_context.get("user_id"),
+            "department": user_context.get("department"),
+            "auth_level": user_context.get("auth_level"),
+            "auth_rank": user_context.get("auth_rank"),
         },
         "selected_sources": selected_sources,
         "selection_reasoning": reasoning,
         "allowed_scope_count": len(allowed_scopes),
         "allowed_scopes": allowed_scopes,
-        "blocked_sources": blocked_sources,
+        "blocked_sources": [],
         "source_plan_count": len(source_plans),
         "source_plans": source_plans,
     }

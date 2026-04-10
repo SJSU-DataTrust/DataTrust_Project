@@ -1,4 +1,4 @@
-const BACKEND_URL = "/api";
+const BACKEND_URL = "http://localhost:8000";
 
 export async function getRetrievalPlan(userId: string, text: string) {
   const res = await fetch(`${BACKEND_URL}/retrieval-plan`, {

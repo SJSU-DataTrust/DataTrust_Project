@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { sendChat } from "../services/api";
 
 type ChatApiResponse = {
@@ -37,27 +37,75 @@ type ChatMessage =
   | { type: "answer"; data: ChatApiResponse }
   | { type: "system"; text: string };
 
+type DemoUser = {
+  key: string;
+  label: string;
+  userId: string;
+  department: string;
+  level: string;
+};
+
+const DEMO_USERS: DemoUser[] = [
+  {
+    key: "tech-l1",
+    label: "Tech L1",
+    userId: "a9285829-1226-494c-ab8e-82fd49af258f",
+    department: "TECH",
+    level: "L1",
+  },
+  {
+    key: "tech-l2",
+    label: "Tech L2",
+    userId: "c68c63d4-707c-4e82-896e-dd5fc2704371",
+    department: "TECH",
+    level: "L2",
+  },
+  {
+    key: "tech-l3",
+    label: "Tech L3",
+    userId: "a9f4626e-391e-48b9-9134-8f95863d4601", // replace with real UUID if needed
+    department: "TECH",
+    level: "L3",
+  },
+  {
+    key: "hr-l1",
+    label: "HR L1",
+    userId: "1edab7be-5f84-4334-aedb-6046eafb7263", // replace with real UUID if needed
+    department: "HR",
+    level: "L1",
+  },
+  {
+    key: "hr-l3",
+    label: "HR L3",
+    userId: "c68c63d4-707c-4e82-896e-dd5fc2704371", // replace with real UUID if needed
+    department: "HR",
+    level: "L3",
+  },
+];
+
 function Pill({
   children,
-  color = "#1f2937",
-  textColor = "#e5e7eb",
-  borderColor = "#374151",
+  background = "#1f2937",
+  color = "#e5e7eb",
+  border = "#374151",
 }: {
   children: React.ReactNode;
+  background?: string;
   color?: string;
-  textColor?: string;
-  borderColor?: string;
+  border?: string;
 }) {
   return (
     <span
       style={{
-        display: "inline-block",
+        display: "inline-flex",
+        alignItems: "center",
         padding: "6px 10px",
         borderRadius: "999px",
-        background: color,
-        color: textColor,
+        background,
+        color,
+        border: `1px solid ${border}`,
         fontSize: "12px",
-        border: `1px solid ${borderColor}`,
+        fontWeight: 500,
         marginRight: "8px",
         marginBottom: "8px",
       }}
@@ -67,7 +115,7 @@ function Pill({
   );
 }
 
-function SectionCard({
+function Card({
   title,
   children,
 }: {
@@ -77,18 +125,52 @@ function SectionCard({
   return (
     <div
       style={{
-        background: "#111827",
-        border: "1px solid #334155",
-        borderRadius: "12px",
+        marginTop: "14px",
+        borderRadius: "16px",
+        border: "1px solid #243041",
+        background: "#0f172a",
         padding: "14px",
-        marginTop: "12px",
       }}
     >
-      <div style={{ fontWeight: 600, marginBottom: "10px", color: "#f9fafb" }}>
+      <div
+        style={{
+          fontSize: "13px",
+          fontWeight: 700,
+          color: "#cbd5e1",
+          marginBottom: "10px",
+          letterSpacing: "0.02em",
+        }}
+      >
         {title}
       </div>
       {children}
     </div>
+  );
+}
+
+function SidebarButton({
+  children,
+  onClick,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: "100%",
+        padding: "12px 14px",
+        borderRadius: "14px",
+        border: "1px solid #253245",
+        background: "linear-gradient(180deg, #111827 0%, #0b1220 100%)",
+        color: "#f8fafc",
+        cursor: "pointer",
+        fontWeight: 600,
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -97,49 +179,64 @@ function BlockedMessageCard({ data }: { data: ChatApiResponse }) {
     <div
       style={{
         maxWidth: "900px",
-        background: "#2a0f12",
+        background: "linear-gradient(180deg, #2b1218 0%, #1f0d12 100%)",
         border: "1px solid #7f1d1d",
-        borderRadius: "16px",
-        padding: "16px",
-        color: "#fecaca",
+        borderRadius: "20px",
+        padding: "18px",
+        color: "#fee2e2",
+        boxShadow: "0 8px 30px rgba(0,0,0,0.2)",
       }}
     >
-      <div style={{ fontSize: "16px", fontWeight: 700, marginBottom: "10px" }}>
-        Blocked by policy
+      <div style={{ fontSize: "16px", fontWeight: 800, marginBottom: "12px" }}>
+        Request blocked by policy
       </div>
 
-      <div style={{ marginBottom: "12px" }}>
-        <Pill color="#3f1d1d" textColor="#fecaca" borderColor="#7f1d1d">
+      <div style={{ marginBottom: "10px" }}>
+        <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
           Decision: {data.policy.decision}
         </Pill>
-        <Pill color="#3f1d1d" textColor="#fecaca" borderColor="#7f1d1d">
+        <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
           Category: {data.policy.reason_category || "RESTRICTED_REQUEST"}
         </Pill>
-        <Pill color="#3f1d1d" textColor="#fecaca" borderColor="#7f1d1d">
+        <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
           Risk: {data.policy.risk_level} ({data.policy.risk_score})
         </Pill>
       </div>
 
-      <div style={{ marginBottom: "10px", color: "#fee2e2" }}>
-        {data.policy.user_safe_explanation || "This request is not allowed by policy."}
+      <div style={{ color: "#ffe4e6", lineHeight: 1.6 }}>
+        {data.policy.user_safe_explanation || "This request is restricted by policy."}
       </div>
 
       {data.policy.suggested_safe_alternative && (
-        <div style={{ color: "#fecaca", fontSize: "14px" }}>
-          <strong>Allowed alternative:</strong> {data.policy.suggested_safe_alternative}
+        <div
+          style={{
+            marginTop: "12px",
+            padding: "12px",
+            borderRadius: "14px",
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            color: "#fecdd3",
+          }}
+        >
+          <strong>Try instead:</strong> {data.policy.suggested_safe_alternative}
         </div>
       )}
 
       {data.policy.matched_rules?.length > 0 && (
-        <SectionCard title="Matched Policy Rules">
+        <Card title="Matched policy rules">
           <div>
             {data.policy.matched_rules.map((rule) => (
-              <Pill key={rule} color="#3f1d1d" textColor="#fecaca" borderColor="#7f1d1d">
+              <Pill
+                key={rule}
+                background="#3f1d1d"
+                color="#fecaca"
+                border="#7f1d1d"
+              >
                 {rule}
               </Pill>
             ))}
           </div>
-        </SectionCard>
+        </Card>
       )}
     </div>
   );
@@ -149,61 +246,79 @@ function AnswerCard({ data }: { data: ChatApiResponse }) {
   return (
     <div
       style={{
-        maxWidth: "900px",
-        background: "#0f172a",
-        border: "1px solid #334155",
-        borderRadius: "16px",
-        padding: "16px",
+        maxWidth: "920px",
+        background: "linear-gradient(180deg, #0f172a 0%, #0b1325 100%)",
+        border: "1px solid #243041",
+        borderRadius: "20px",
+        padding: "18px",
         color: "#e5e7eb",
+        boxShadow: "0 8px 30px rgba(0,0,0,0.18)",
       }}
     >
-      <div style={{ marginBottom: "12px" }}>
-        <Pill>Decision: {data.policy.decision}</Pill>
-        <Pill>Action: {data.policy.action}</Pill>
-        <Pill>Risk: {data.policy.risk_level}</Pill>
-        <Pill>Retrieved: {data.retrieval_count}</Pill>
+      <div style={{ marginBottom: "10px" }}>
+        <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
+          Decision: {data.policy.decision}
+        </Pill>
+        <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
+          Action: {data.policy.action}
+        </Pill>
+        <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
+          Risk: {data.policy.risk_level}
+        </Pill>
+        <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
+          Retrieved: {data.retrieval_count}
+        </Pill>
       </div>
 
       <div
         style={{
-          background: "#111827",
-          border: "1px solid #334155",
-          borderRadius: "12px",
-          padding: "14px",
           whiteSpace: "pre-wrap",
-          lineHeight: 1.6,
+          lineHeight: 1.7,
+          fontSize: "15px",
+          color: "#e2e8f0",
+          padding: "14px",
+          borderRadius: "16px",
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.06)",
         }}
       >
         {data.answer || "No answer returned."}
       </div>
 
       {data.selected_sources?.length > 0 && (
-        <SectionCard title="Selected Sources">
+        <Card title="Selected sources">
           <div>
             {data.selected_sources.map((source) => (
               <Pill key={source}>{source}</Pill>
             ))}
           </div>
-        </SectionCard>
+        </Card>
       )}
 
       {data.source_references?.length > 0 && (
-        <SectionCard title="Source References">
+        <Card title="Source references">
           <div style={{ display: "grid", gap: "10px" }}>
             {data.source_references.map((ref) => (
               <div
                 key={ref.chunk_id}
                 style={{
-                  background: "#1e293b",
-                  border: "1px solid #334155",
-                  borderRadius: "10px",
+                  borderRadius: "14px",
+                  border: "1px solid #243041",
+                  background: "#101928",
                   padding: "12px",
                 }}
               >
-                <div style={{ fontWeight: 600 }}>
+                <div style={{ fontWeight: 700, color: "#f8fafc" }}>
                   {ref.resource_name || ref.title || `Chunk ${ref.chunk_id}`}
                 </div>
-                <div style={{ fontSize: "13px", color: "#94a3b8", marginTop: "4px" }}>
+                <div
+                  style={{
+                    marginTop: "4px",
+                    fontSize: "13px",
+                    color: "#94a3b8",
+                    lineHeight: 1.5,
+                  }}
+                >
                   {ref.source_type} • {ref.resource_path || "No path"}
                 </div>
                 <div style={{ marginTop: "8px" }}>
@@ -213,7 +328,7 @@ function AnswerCard({ data }: { data: ChatApiResponse }) {
               </div>
             ))}
           </div>
-        </SectionCard>
+        </Card>
       )}
     </div>
   );
@@ -224,9 +339,12 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [selectedUserKey, setSelectedUserKey] = useState("tech-l2");
 
-  // Keep fixed user during development
-  const userId = "c68c63d4-707c-4e82-896e-dd5fc2704371";
+  const activeUser = useMemo(
+    () => DEMO_USERS.find((u) => u.key === selectedUserKey) || DEMO_USERS[1],
+    [selectedUserKey]
+  );
 
   const handleSend = async () => {
     if (!text.trim()) return;
@@ -239,7 +357,7 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, { type: "user", text: userText }]);
 
     try {
-      const result = await sendChat(userId, userText);
+      const result = await sendChat(activeUser.userId, userText);
 
       if (result.blocked) {
         setMessages((prev) => [...prev, { type: "blocked", data: result.data }]);
@@ -254,7 +372,7 @@ export default function ChatPage() {
           ...prev,
           {
             type: "system",
-            text: "Your session has expired. Please sign in again.",
+            text: "Your session expired. Please sign in again.",
           },
         ]);
       } else {
@@ -266,61 +384,173 @@ export default function ChatPage() {
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh", background: "#020617", color: "white" }}>
-      <div
+    <div
+      style={{
+        display: "flex",
+        height: "100vh",
+        background:
+          "radial-gradient(circle at top left, #172554 0%, #020617 35%, #030712 100%)",
+        color: "white",
+      }}
+    >
+      <aside
         style={{
-          width: "260px",
+          width: "290px",
           borderRight: "1px solid #1e293b",
-          padding: "20px",
-          background: "#020c1f",
+          padding: "22px",
+          background: "rgba(2, 6, 23, 0.88)",
+          backdropFilter: "blur(14px)",
         }}
       >
-        <h2 style={{ margin: 0, marginBottom: "20px" }}>DataTrust</h2>
+        <div style={{ marginBottom: "20px" }}>
+          <div
+            style={{
+              fontSize: "22px",
+              fontWeight: 900,
+              letterSpacing: "-0.02em",
+              color: "#f8fafc",
+            }}
+          >
+            DataTrust
+          </div>
+          <div style={{ marginTop: "6px", fontSize: "13px", color: "#94a3b8" }}>
+            Private, policy-aware AI assistant
+          </div>
+        </div>
 
-        <button
-          style={{
-            width: "100%",
-            padding: "12px",
-            borderRadius: "10px",
-            border: "1px solid #334155",
-            background: "#111827",
-            color: "white",
-            cursor: "pointer",
-            marginBottom: "16px",
-          }}
+        <SidebarButton
           onClick={() => {
             setMessages([]);
             setError("");
           }}
         >
           + New Chat
-        </button>
+        </SidebarButton>
 
-        <div style={{ color: "#94a3b8", fontSize: "14px" }}>Chats</div>
-      </div>
-
-      <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
         <div
           style={{
-            padding: "16px 20px",
-            borderBottom: "1px solid #1e293b",
-            background: "#04112b",
-            display: "flex",
-            justifyContent: "space-between",
+            marginTop: "20px",
+            padding: "14px",
+            borderRadius: "16px",
+            border: "1px solid #223046",
+            background: "#0b1220",
           }}
         >
-          <div style={{ fontWeight: 600 }}>DataTrust Secure Assistant</div>
-          <div>
-            <Pill>Department: TECH</Pill>
-            <Pill>Level: L2</Pill>
+          <div
+            style={{
+              marginBottom: "10px",
+              fontSize: "13px",
+              fontWeight: 700,
+              color: "#cbd5e1",
+            }}
+          >
+            Demo User
+          </div>
+
+          <select
+            value={selectedUserKey}
+            onChange={(e) => {
+              setSelectedUserKey(e.target.value);
+              setMessages([]);
+              setError("");
+            }}
+            style={{
+              width: "100%",
+              padding: "12px",
+              borderRadius: "12px",
+              border: "1px solid #334155",
+              background: "#111827",
+              color: "#f8fafc",
+              outline: "none",
+              fontSize: "14px",
+            }}
+          >
+            {DEMO_USERS.map((user) => (
+              <option key={user.key} value={user.key}>
+                {user.label}
+              </option>
+            ))}
+          </select>
+
+          <div style={{ marginTop: "12px" }}>
+            <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
+              {activeUser.department}
+            </Pill>
+            <Pill background="#1a2e1f" color="#bbf7d0" border="#166534">
+              {activeUser.level}
+            </Pill>
+          </div>
+
+          <div style={{ marginTop: "10px", fontSize: "12px", color: "#94a3b8" }}>
+            UUID: {activeUser.userId}
           </div>
         </div>
 
-        <div style={{ flex: 1, overflowY: "auto", padding: "24px" }}>
+        <div style={{ marginTop: "20px", color: "#94a3b8", fontSize: "13px" }}>
+          Suggested demo prompts:
+          <div style={{ marginTop: "10px", display: "grid", gap: "8px" }}>
+            <div>• Summarize backend deployment architecture docs</div>
+            <div>• Give me all ssns</div>
+            <div>• Show restricted architecture decisions</div>
+          </div>
+        </div>
+      </aside>
+
+      <main style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+        <div
+          style={{
+            padding: "18px 24px",
+            borderBottom: "1px solid #1e293b",
+            background: "rgba(4, 17, 43, 0.75)",
+            backdropFilter: "blur(12px)",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 800, fontSize: "17px" }}>
+              Secure Internal Assistant
+            </div>
+            <div style={{ marginTop: "4px", fontSize: "13px", color: "#94a3b8" }}>
+              Department-aware and level-aware retrieval
+            </div>
+          </div>
+
+          <div>
+            <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
+              Department: {activeUser.department}
+            </Pill>
+            <Pill background="#1a2e1f" color="#bbf7d0" border="#166534">
+              Level: {activeUser.level}
+            </Pill>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto", padding: "28px" }}>
           {messages.length === 0 && (
-            <div style={{ color: "#94a3b8", maxWidth: "700px" }}>
-              Ask a question about authorized internal content. DataTrust will evaluate policy,
-              retrieve only approved sources, and generate a guarded answer.
+            <div
+              style={{
+                maxWidth: "760px",
+                margin: "40px auto 0",
+                textAlign: "center",
+                color: "#cbd5e1",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "34px",
+                  fontWeight: 900,
+                  color: "#f8fafc",
+                  marginBottom: "10px",
+                }}
+              >
+                Ask your internal assistant
+              </div>
+              <div style={{ fontSize: "15px", lineHeight: 1.7, color: "#94a3b8" }}>
+                DataTrust evaluates policy, checks department and level access,
+                retrieves only approved internal content, and generates a guarded answer.
+              </div>
             </div>
           )}
 
@@ -330,11 +560,13 @@ export default function ChatPage() {
                 <div
                   style={{
                     marginLeft: "auto",
-                    maxWidth: "720px",
-                    background: "#2563eb",
+                    maxWidth: "760px",
+                    padding: "15px 18px",
+                    borderRadius: "20px",
+                    background:
+                      "linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #1e40af 100%)",
                     color: "white",
-                    padding: "14px 16px",
-                    borderRadius: "16px",
+                    boxShadow: "0 8px 30px rgba(37,99,235,0.28)",
                   }}
                 >
                   {message.text}
@@ -342,17 +574,17 @@ export default function ChatPage() {
               )}
 
               {message.type === "blocked" && <BlockedMessageCard data={message.data} />}
-
               {message.type === "answer" && <AnswerCard data={message.data} />}
 
               {message.type === "system" && (
                 <div
                   style={{
-                    maxWidth: "720px",
-                    background: "#1f2937",
+                    maxWidth: "760px",
+                    background: "#111827",
                     color: "#e5e7eb",
                     padding: "14px 16px",
                     borderRadius: "16px",
+                    border: "1px solid #243041",
                   }}
                 >
                   {message.text}
@@ -361,7 +593,11 @@ export default function ChatPage() {
             </div>
           ))}
 
-          {loading && <div style={{ color: "#94a3b8" }}>Processing request...</div>}
+          {loading && (
+            <div style={{ color: "#93c5fd", fontSize: "14px", marginTop: "10px" }}>
+              Processing request...
+            </div>
+          )}
 
           {error && (
             <div
@@ -370,7 +606,8 @@ export default function ChatPage() {
                 background: "#3f1d1d",
                 color: "#fecaca",
                 padding: "12px",
-                borderRadius: "10px",
+                borderRadius: "12px",
+                border: "1px solid #7f1d1d",
               }}
             >
               {error}
@@ -380,45 +617,62 @@ export default function ChatPage() {
 
         <div
           style={{
-            padding: "16px 20px",
+            padding: "18px 24px",
             borderTop: "1px solid #1e293b",
-            background: "#04112b",
-            display: "flex",
-            gap: "12px",
+            background: "rgba(4, 17, 43, 0.75)",
+            backdropFilter: "blur(12px)",
           }}
         >
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={3}
+          <div
             style={{
-              flex: 1,
-              padding: "14px",
-              borderRadius: "12px",
-              border: "1px solid #334155",
-              background: "#f8fafc",
-              color: "#111827",
-              resize: "none",
-            }}
-            placeholder="Ask about internal documents, repositories, or knowledge..."
-          />
-          <button
-            onClick={handleSend}
-            disabled={loading}
-            style={{
-              minWidth: "110px",
-              borderRadius: "12px",
-              border: "1px solid #334155",
-              background: loading ? "#475569" : "#2563eb",
-              color: "white",
-              cursor: loading ? "not-allowed" : "pointer",
-              fontWeight: 600,
+              display: "flex",
+              gap: "12px",
+              alignItems: "flex-end",
+              maxWidth: "1100px",
+              margin: "0 auto",
             }}
           >
-            {loading ? "Loading..." : "Send"}
-          </button>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={3}
+              style={{
+                flex: 1,
+                padding: "16px",
+                borderRadius: "16px",
+                border: "1px solid #334155",
+                background: "#f8fafc",
+                color: "#111827",
+                resize: "none",
+                fontSize: "14px",
+                lineHeight: 1.5,
+                boxShadow: "inset 0 1px 2px rgba(0,0,0,0.05)",
+              }}
+              placeholder="Ask about internal docs, repos, runbooks, or architecture..."
+            />
+            <button
+              onClick={handleSend}
+              disabled={loading}
+              style={{
+                minWidth: "120px",
+                height: "52px",
+                borderRadius: "16px",
+                border: "1px solid #1d4ed8",
+                background: loading
+                  ? "#475569"
+                  : "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+                color: "white",
+                cursor: loading ? "not-allowed" : "pointer",
+                fontWeight: 800,
+                fontSize: "14px",
+                boxShadow: loading ? "none" : "0 8px 24px rgba(37,99,235,0.25)",
+              }}
+            >
+              {loading ? "Loading..." : "Send"}
+            </button>
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
