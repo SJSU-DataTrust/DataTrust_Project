@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { sendChat } from "../services/api";
+import { useAuth0 } from "@auth0/auth0-react";
+import { auth } from "../services/auth";
 
 type ChatApiResponse = {
   status: string;
@@ -340,6 +342,8 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectedUserKey, setSelectedUserKey] = useState("tech-l2");
+  const { logout, user } = useAuth0();
+
 
   const activeUser = useMemo(
     () => DEMO_USERS.find((u) => u.key === selectedUserKey) || DEMO_USERS[1],
@@ -382,6 +386,11 @@ export default function ChatPage() {
       setLoading(false);
     }
   };
+
+  function handleLogout() {
+    auth.clear();
+    logout({ logoutParams: { returnTo: window.location.origin } });
+  }
 
   return (
     <div
@@ -504,6 +513,7 @@ export default function ChatPage() {
             alignItems: "center",
           }}
         >
+          {/* Left — title */}
           <div>
             <div style={{ fontWeight: 900, fontSize: "18px" }}>
               Secure Internal Assistant
@@ -513,13 +523,50 @@ export default function ChatPage() {
             </div>
           </div>
 
-          <div>
+          {/* Right — user info + logout */}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
               Department: {activeUser.department}
             </Pill>
             <Pill background="#1a2e1f" color="#bbf7d0" border="#166534">
               Level: {activeUser.level}
             </Pill>
+
+            {/* Logged in user */}
+            {user && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: "8px",
+                padding: "6px 12px", borderRadius: "999px",
+                border: "1px solid #334155", background: "#0f172a",
+                fontSize: "13px", color: "#94a3b8"
+              }}>
+                {user.picture && (
+                  <img
+                    src={user.picture}
+                    alt="avatar"
+                    style={{ width: "22px", height: "22px", borderRadius: "50%" }}
+                  />
+                )}
+                <span>{user.name || user.email}</span>
+              </div>
+            )}
+
+            {/* Logout button */}
+            <button
+              onClick={handleLogout}
+              style={{
+                padding: "8px 16px",
+                borderRadius: "10px",
+                border: "1px solid #7f1d1d",
+                background: "#3f1d1d",
+                color: "#fca5a5",
+                fontSize: "13px",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Sign Out
+            </button>
           </div>
         </div>
 
