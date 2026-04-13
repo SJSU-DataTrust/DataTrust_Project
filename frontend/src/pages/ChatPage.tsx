@@ -400,62 +400,131 @@ export default function ChatPage() {
 
     try {
       await streamChat(activeUser.userId, userText, {
-        onToken: (token) => {
-          setMessages((prev) => {
-            const copy = [...prev];
-            const last = copy[copy.length - 1];
-            if (last?.type === "streaming") {
-              last.text = (last.text || "") + token;
-            }
-            return copy;
-          });
-        },
-        onDone: (finalPayload) => {
-          setMessages((prev) => {
-            const copy = [...prev];
-            const last = copy[copy.length - 1];
+  onToken: (token) => {
+    setMessages((prev) => {
+      const copy = [...prev];
+      const last = copy[copy.length - 1];
+      if (last?.type === "streaming") {
+        last.text = (last.text || "") + token;
+      }
+      return copy;
+    });
+  },
+  onDone: (finalPayload) => {
+    setMessages((prev) => {
+      const copy = [...prev];
+      const last = copy[copy.length - 1];
 
-            if (!last || last.type !== "streaming") {
-              return copy;
-            }
+      if (!last || last.type !== "streaming") {
+        return copy;
+      }
 
-            copy.pop();
+      copy.pop();
 
-            if (finalPayload?.status === "blocked") {
-              copy.push({ type: "blocked", data: finalPayload });
-            } else if (finalPayload) {
-              copy.push({ type: "answer", data: finalPayload });
-            } else {
-              copy.push({
-                type: "system",
-                text: "Streaming completed but no final payload was returned.",
-              });
-            }
+      if (finalPayload?.status === "blocked") {
+        copy.push({ type: "blocked", data: finalPayload });
+      } else if (finalPayload) {
+        copy.push({ type: "answer", data: finalPayload });
+      } else {
+        copy.push({
+          type: "system",
+          text: "Streaming completed but no final payload was returned.",
+        });
+      }
 
-            return copy;
-          });
-          setLoading(false);
-        },
-        onError: (message) => {
-          setMessages((prev) => {
-            const copy = [...prev];
-            const last = copy[copy.length - 1];
+      return copy;
+    });
+    setLoading(false);
+  },
+  onBlocked: (blockedPayload) => {
+    setMessages((prev) => {
+      const copy = [...prev];
+      const last = copy[copy.length - 1];
+      if (last?.type === "streaming") {
+        copy.pop();
+      }
+      copy.push({ type: "blocked", data: blockedPayload });
+      return copy;
+    });
+    setLoading(false);
+  },
+  onError: (message) => {
+    setMessages((prev) => {
+      const copy = [...prev];
+      const last = copy[copy.length - 1];
 
-            if (last?.type === "streaming") {
-              copy.pop();
-            }
+      if (last?.type === "streaming") {
+        copy.pop();
+      }
 
-            copy.push({
-              type: "system",
-              text: `Error: ${message}`,
-            });
-
-            return copy;
-          });
-          setError(message);
-          setLoading(false);
-        },
+      copy.push({
+        type: "system",
+        text: `Error: ${message}`,
       });
+
+      return copy;
+    });
+    setError(message);
+    setLoading(false);
+  },
+});
+      // await streamChat(activeUser.userId, userText, {
+      //   onToken: (token) => {
+      //     setMessages((prev) => {
+      //       const copy = [...prev];
+      //       const last = copy[copy.length - 1];
+      //       if (last?.type === "streaming") {
+      //         last.text = (last.text || "") + token;
+      //       }
+      //       return copy;
+      //     });
+      //   },
+      //   onDone: (finalPayload) => {
+      //     setMessages((prev) => {
+      //       const copy = [...prev];
+      //       const last = copy[copy.length - 1];
+
+      //       if (!last || last.type !== "streaming") {
+      //         return copy;
+      //       }
+
+      //       copy.pop();
+
+      //       if (finalPayload?.status === "blocked") {
+      //         copy.push({ type: "blocked", data: finalPayload });
+      //       } else if (finalPayload) {
+      //         copy.push({ type: "answer", data: finalPayload });
+      //       } else {
+      //         copy.push({
+      //           type: "system",
+      //           text: "Streaming completed but no final payload was returned.",
+      //         });
+      //       }
+
+      //       return copy;
+      //     });
+      //     setLoading(false);
+      //   },
+      //   onError: (message) => {
+      //     setMessages((prev) => {
+      //       const copy = [...prev];
+      //       const last = copy[copy.length - 1];
+
+      //       if (last?.type === "streaming") {
+      //         copy.pop();
+      //       }
+
+      //       copy.push({
+      //         type: "system",
+      //         text: `Error: ${message}`,
+      //       });
+
+      //       return copy;
+      //     });
+      //     setError(message);
+      //     setLoading(false);
+      //   },
+      // });
     } catch (err: any) {
       console.error(err);
       setMessages((prev) => {
