@@ -16,8 +16,8 @@ def retrieve_authorized_chunks(query: str, user_context: dict, top_k: int = 5) -
     #         if s.get("source_type") != "GITHUB"
     #     ]
     allowed_scopes = get_allowed_resource_scopes(user_context)
-    selected_sources, reasoning = choose_sources(query, allowed_scopes)
-
+    #selected_sources, reasoning = choose_sources(query, allowed_scopes)
+    selected_sources, reasoning = choose_sources(query, allowed_scopes, user_context)
     # department = user_context.get("department")
 
     
