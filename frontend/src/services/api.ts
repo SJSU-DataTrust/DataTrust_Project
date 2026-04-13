@@ -1,4 +1,4 @@
-const BACKEND_URL = "/api/";
+const BACKEND_URL = "/api";
 
 export async function sendChat(userId: string, text: string) {
   const res = await fetch(`${BACKEND_URL}/chat`, {
