@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 import uuid
+import json
+from fastapi.responses import StreamingResponse
+from app.services.generation_service import generate_answer_with_ollama, stream_answer_with_ollama
 
 from app.core.security import get_current_user_id
 from app.models.chat_models import ChatRequest
@@ -234,3 +237,169 @@ def guarded_chat(request: ChatRequest, user_id: str = Depends(get_current_user_i
     )
 
     return response
+
+@router.post("/chat/stream")
+def guarded_chat_stream(request: ChatRequest, user_id: str = Depends(get_current_user_id)):
+    request_id = str(uuid.uuid4())
+
+    try:
+        user_context = get_user_context(user_id)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"User context error: {str(e)}")
+
+    understanding = understand_request(request.text)
+    policy_result = analyze_text(understanding["normalized_text"], user_context)
+
+    categories = understanding["categories"]
+    action = understanding["action"]
+    normalized_text = understanding["normalized_text"]
+
+    if "PROMPT_INJECTION" in categories:
+        policy_result["status"] = "blocked"
+        policy_result["decision"] = "block"
+        policy_result["code"] = "POLICY_DENIED"
+        policy_result["reason_category"] = "PROMPT_INJECTION"
+        policy_result["user_safe_explanation"] = "This request appears to attempt policy bypass or hidden instruction access."
+        policy_result["suggested_safe_alternative"] = "Ask a scoped question about approved internal resources."
+        policy_result["matched_rules"] = list(set(policy_result["matched_rules"] + ["PROMPT_INJECTION"]))
+        policy_result["risk_level"] = "high"
+        policy_result["risk_score"] = max(policy_result["risk_score"], 85)
+
+    if "PII_HIGH" in categories:
+        policy_result["status"] = "blocked"
+        policy_result["decision"] = "block"
+        policy_result["code"] = "POLICY_DENIED"
+        policy_result["reason_category"] = "SENSITIVE_PERSONAL_DATA"
+        policy_result["user_safe_explanation"] = "This request involves restricted personal data."
+        policy_result["suggested_safe_alternative"] = "Request a redacted or aggregated summary if your role allows it."
+        policy_result["matched_rules"] = list(set(policy_result["matched_rules"] + ["PII_HIGH"]))
+        policy_result["risk_level"] = "high"
+        policy_result["risk_score"] = max(policy_result["risk_score"], 85)
+
+    if "CREDENTIALS" in categories:
+        policy_result["status"] = "blocked"
+        policy_result["decision"] = "block"
+        policy_result["code"] = "POLICY_DENIED"
+        policy_result["reason_category"] = "CREDENTIALS"
+        policy_result["user_safe_explanation"] = "Credentials, secrets, and private keys cannot be disclosed."
+        policy_result["suggested_safe_alternative"] = "Ask for a high-level explanation without sensitive values."
+        policy_result["matched_rules"] = list(set(policy_result["matched_rules"] + ["CREDENTIALS"]))
+        policy_result["risk_level"] = "high"
+        policy_result["risk_score"] = max(policy_result["risk_score"], 90)
+
+    if (
+        "SOURCE_CODE" in categories
+        and (
+            "EXTERNAL_SHARING" in categories
+            or action == "upload_to_external_ai"
+            or " into ai" in normalized_text
+            or " external_ai" in normalized_text
+        )
+    ):
+        policy_result["status"] = "blocked"
+        policy_result["decision"] = "block"
+        policy_result["code"] = "POLICY_DENIED"
+        policy_result["reason_category"] = "SOURCE_CODE_EXTERNALIZATION"
+        policy_result["user_safe_explanation"] = "Uploading or sharing internal source code with external AI tools is restricted."
+        policy_result["suggested_safe_alternative"] = "Ask for an internal architecture summary or a scoped explanation using approved internal sources."
+        policy_result["matched_rules"] = list(set(policy_result["matched_rules"] + ["EXTERNAL_AI_RISK", "SOURCE_CODE_EXTERNALIZATION"]))
+        policy_result["risk_level"] = "high"
+        policy_result["risk_score"] = max(policy_result["risk_score"], 90)
+
+    if policy_result["status"] == "blocked":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "status": "blocked",
+                "policy": policy_result,
+            },
+        )
+
+    retrieval = retrieve_authorized_chunks(request.text, user_context, top_k=request.top_k)
+    chunks = retrieval["chunks"]
+
+    if not chunks:
+        def no_context_stream():
+            yield json.dumps({
+                "type": "final",
+                "data": {
+                    "status": "clarify",
+                    "answer": "I could not find authorized internal content for that request. Try narrowing the request to a known department-approved resource or document type.",
+                    "policy": {
+                        "status": policy_result["status"],
+                        "decision": policy_result["decision"],
+                        "code": None,
+                        "reason_category": None,
+                        "user_safe_explanation": None,
+                        "suggested_safe_alternative": "Ask for a specific repo, page tree, runbook, or internal document within your approved scope.",
+                        "matched_rules": policy_result["matched_rules"],
+                        "categories": understanding["categories"],
+                        "action": understanding["action"],
+                        "risk_level": policy_result["risk_level"],
+                        "risk_score": policy_result["risk_score"],
+                    },
+                    "selected_sources": retrieval["selected_sources"],
+                    "source_references": [],
+                    "retrieval_count": 0,
+                    "metadata": {
+                        "request_id": request_id,
+                        "normalized_text": understanding["normalized_text"],
+                        "selection_reasoning": retrieval["selection_reasoning"],
+                    },
+                }
+            }) + "\n"
+
+        return StreamingResponse(no_context_stream(), media_type="application/x-ndjson")
+
+    def event_stream():
+        full_answer = ""
+
+        for token in stream_answer_with_ollama(user_context, request.text, chunks):
+            full_answer += token
+            yield json.dumps({"type": "token", "token": token}) + "\n"
+
+        output_check = validate_generated_answer(full_answer)
+        final_status = "allowed" if output_check["status"] == "clean" else "allowed_with_redaction"
+
+        final_payload = {
+            "status": final_status,
+            "answer": output_check["answer"],
+            "policy": {
+                "status": policy_result["status"],
+                "decision": policy_result["decision"],
+                "code": None,
+                "reason_category": None,
+                "user_safe_explanation": None,
+                "suggested_safe_alternative": None,
+                "matched_rules": policy_result["matched_rules"],
+                "categories": understanding["categories"],
+                "action": understanding["action"],
+                "risk_level": policy_result["risk_level"],
+                "risk_score": policy_result["risk_score"],
+            },
+            "selected_sources": retrieval["selected_sources"],
+            "source_references": [
+                {
+                    "chunk_id": c["chunk_id"],
+                    "document_id": c["document_id"],
+                    "title": c["title"],
+                    "resource_path": c["resource_path"],
+                    "source_type": c["source_type"],
+                    "resource_name": c["resource_name"],
+                    "score": c["score"],
+                }
+                for c in chunks
+            ],
+            "retrieval_count": len(chunks),
+            "metadata": {
+                "request_id": request_id,
+                "normalized_text": understanding["normalized_text"],
+                "selection_reasoning": retrieval["selection_reasoning"],
+                "output_validation": output_check["status"],
+                "output_hits": output_check["hits"],
+            },
+        }
+
+        yield json.dumps({"type": "final", "data": final_payload}) + "\n"
+
+    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
