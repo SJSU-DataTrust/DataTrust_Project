@@ -354,6 +354,15 @@ def guarded_chat_stream(request: ChatRequest, user_id: str = Depends(get_current
     def event_stream():
         full_answer = ""
 
+        # for token in stream_answer_with_ollama(user_context, request.text, chunks):
+        #     full_answer += token
+        #     yield json.dumps({"type": "token", "token": token}) + "\n"
+        # immediate keepalive/start event so nginx/browser see bytes quickly
+        yield json.dumps({
+            "type": "start",
+            "request_id": request_id,
+        }) + "\n"
+
         for token in stream_answer_with_ollama(user_context, request.text, chunks):
             full_answer += token
             yield json.dumps({"type": "token", "token": token}) + "\n"
