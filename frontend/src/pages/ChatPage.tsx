@@ -372,7 +372,7 @@ function StreamingAnswerCard({ text }: { text: string }) {
   );
 }
 
-export default function ChatPage() {
+export default function ChatPage({ userId: propUserId }: { userId?: string } = {}) {
   const [text, setText] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -383,6 +383,8 @@ export default function ChatPage() {
     () => DEMO_USERS.find((u) => u.key === selectedUserKey) || DEMO_USERS[1],
     [selectedUserKey]
   );
+
+  const effectiveUserId = propUserId ?? activeUser.userId;
 
   const handleSend = async () => {
     if (!text.trim() || loading) return;
@@ -399,7 +401,7 @@ export default function ChatPage() {
     ]);
 
     try {
-      await streamChat(activeUser.userId, userText, {
+      await streamChat(effectiveUserId, userText, {
   onToken: (token) => {
     setMessages((prev) => {
       const copy = [...prev];

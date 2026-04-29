@@ -1,5 +1,21 @@
 const BACKEND_URL = "/api";
 
+export async function login(email: string, password: string): Promise<string> {
+  const res = await fetch(`${BACKEND_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+
+  const { data } = await parseResponseSafely(res);
+
+  if (!res.ok) {
+    throw new Error(data?.detail || "Login failed");
+  }
+
+  return data.user_id;
+}
+
 type ChatResult =
   | { blocked: true; data: any }
   | { blocked: false; data: any };

@@ -1,16 +1,28 @@
 import { useState } from "react";
+import { login } from "../services/api";
 
 type Props = {
-  onLogin: (email: string) => void;
+  onLogin: (userId: string) => void;
 };
 
 export default function LoginPage({ onLogin }: Props) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!email.trim() || !password.trim()) return;
-    onLogin(email);
+    setError("");
+    setLoading(true);
+    try {
+      const userId = await login(email.trim(), password);
+      onLogin(userId);
+    } catch (e: any) {
+      setError(e.message || "Login failed");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -66,20 +78,28 @@ export default function LoginPage({ onLogin }: Props) {
           />
         </div>
 
+        {error && (
+          <p style={{ color: "#f87171", marginBottom: "12px", fontSize: "14px" }}>
+            {error}
+          </p>
+        )}
+
         <button
           onClick={handleSubmit}
+          disabled={loading}
           style={{
             width: "100%",
             padding: "12px",
             borderRadius: "10px",
             border: "1px solid #334155",
-            background: "#2563eb",
+            background: loading ? "#1d4ed8" : "#2563eb",
             color: "white",
             fontWeight: 600,
-            cursor: "pointer",
+            cursor: loading ? "not-allowed" : "pointer",
+            opacity: loading ? 0.7 : 1,
           }}
         >
-          Sign In
+          {loading ? "Signing in…" : "Sign In"}
         </button>
       </div>
     </div>
