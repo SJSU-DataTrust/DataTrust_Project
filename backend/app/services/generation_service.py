@@ -44,7 +44,7 @@ def _prepare_chunks(chunks: list[dict]) -> list[dict]:
     for chunk in chunks[:2]:
         trimmed.append({
             **chunk,
-            "chunk_text": chunk.get("chunk_text", "")[:700],
+            "chunk_text": chunk.get("chunk_text", "")[:500],
         })
     return trimmed
 
@@ -52,31 +52,31 @@ def _prepare_chunks(chunks: list[dict]) -> list[dict]:
 def choose_model(query: str, chunks: list[dict]) -> str:
     q = (query or "").lower()
 
-    technical_terms = [
-        "code",
-        "function",
-        "api",
-        "backend",
-        "frontend",
-        "architecture",
-        "typescript",
-        "javascript",
-        "python",
-        "bug",
+    strong_code_terms = [
+        "write code",
+        "generate code",
+        "fix bug",
         "debug",
-        "service",
-        "route",
-        "controller",
-        "database",
-        "schema",
-        "query",
-        "deployment",
-        "runbook",
+        "stack trace",
+        "exception",
+        "error log",
+        "typescript file",
+        "javascript file",
+        "python file",
+        "sql query",
+        "endpoint implementation",
+        "controller code",
+        "service code",
+        "function implementation",
+        "class definition",
+        "refactor",
     ]
 
-    if any(term in q for term in technical_terms):
+    # Only use qwen coder for clearly code-centric tasks
+    if any(term in q for term in strong_code_terms):
         return "qwen2.5-coder:7b"
 
+    # Default to faster model for summaries, architecture, docs, explanations
     return "phi3:latest"
 
 
@@ -91,6 +91,10 @@ def generate_answer_with_ollama(user_context: dict, query: str, chunks: list[dic
             "model": model_name,
             "prompt": prompt,
             "stream": False,
+            "options": {
+                "temperature": 0.2,
+                "num_predict": 180,
+            },
         },
         timeout=(10, 180),
     )
@@ -111,6 +115,10 @@ def stream_answer_with_ollama(user_context: dict, query: str, chunks: list[dict]
             "model": model_name,
             "prompt": prompt,
             "stream": True,
+            "options": {
+                "temperature": 0.2,
+                "num_predict": 180,
+            },
         },
         timeout=(10, 180),
         stream=True,

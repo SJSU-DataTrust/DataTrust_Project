@@ -40,7 +40,7 @@ export async function sendChat(userId: string, text: string): Promise<ChatResult
       "Content-Type": "application/json",
       "X-User-Id": userId,
     },
-    body: JSON.stringify({ text, top_k: 5 }),
+    body: JSON.stringify({ text, top_k: 3 }),
   });
 
   const { data } = await parseResponseSafely(res);
@@ -77,7 +77,7 @@ export async function streamChat(
       "Content-Type": "application/json",
       "X-User-Id": userId,
     },
-    body: JSON.stringify({ text, top_k: 5
+    body: JSON.stringify({ text, top_k: 3
      }),
   });
 

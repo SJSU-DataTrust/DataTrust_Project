@@ -10,10 +10,9 @@ from app.routers.chat import router as chat_router
 from app.routers.debug import router as debug_router
 from app.routers.local_ingestion import router as local_ingestion_router
 from app.routers.admin import router as admin_router
-
-from app.services.embedding_service import generate_embedding
 import requests
 from app.core.config import settings
+from app.services.embedding_service import generate_embedding
 
 app = FastAPI(title="DataTrust Backend")
 
@@ -21,6 +20,7 @@ app = FastAPI(title="DataTrust Backend")
 def warm_up_models():
     try:
         generate_embedding("warm up")
+        print("Embedding model warmed up")
     except Exception as e:
         print(f"Embedding warm-up failed: {e}")
 
@@ -28,12 +28,14 @@ def warm_up_models():
         requests.post(
             f"{settings.LLM_URL}/api/generate",
             json={
-                "model": settings.OLLAMA_MODEL,
+                "model": "phi3:latest",
                 "prompt": "hello",
                 "stream": False,
+                "options": {"num_predict": 10},
             },
             timeout=60,
         )
+        print("LLM warm-up completed")
     except Exception as e:
         print(f"LLM warm-up failed: {e}")
 
