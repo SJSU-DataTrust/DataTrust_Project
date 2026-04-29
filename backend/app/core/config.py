@@ -4,8 +4,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Settings:
-    LLM_URL = os.getenv("LLM_URL", "http://10.10.3.10:11434")
-    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "phi3")
+    LLM_URL = os.getenv("LLM_URL", "http://10.10.3.2:11434")
+    OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "")
 
     SUPABASE_URL = os.getenv("SUPABASE_URL", "")
     SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
