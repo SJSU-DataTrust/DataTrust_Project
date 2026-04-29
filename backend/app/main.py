@@ -11,7 +11,31 @@ from app.routers.debug import router as debug_router
 from app.routers.local_ingestion import router as local_ingestion_router
 from app.routers.admin import router as admin_router
 
+from app.services.embedding_service import generate_embedding
+import requests
+from app.core.config import settings
+
 app = FastAPI(title="DataTrust Backend")
+
+@app.on_event("startup")
+def warm_up_models():
+    try:
+        generate_embedding("warm up")
+    except Exception as e:
+        print(f"Embedding warm-up failed: {e}")
+
+    try:
+        requests.post(
+            f"{settings.LLM_URL}/api/generate",
+            json={
+                "model": settings.OLLAMA_MODEL,
+                "prompt": "hello",
+                "stream": False,
+            },
+            timeout=60,
+        )
+    except Exception as e:
+        print(f"LLM warm-up failed: {e}")
 
 app.add_middleware(
     CORSMiddleware,
