@@ -366,7 +366,10 @@ function StreamingAnswerCard({ text }: { text: string }) {
           border: "1px solid rgba(255,255,255,0.06)",
         }}
       >
-        {text || "Thinking..."}
+        {text || "Thinking… waiting for first token"}
+        <div style={{ marginTop: "10px", fontSize: "12px", color: "#94a3b8" }}>
+          Streaming response in progress
+        </div>
       </div>
     </div>
   );
@@ -402,15 +405,32 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 
     try {
       await streamChat(effectiveUserId, userText, {
+  // onToken: (token) => {
+  //   setMessages((prev) => {
+  //     const copy = [...prev];
+  //     const last = copy[copy.length - 1];
+  //     if (last?.type === "streaming") {
+  //       last.text = (last.text || "") + token;
+  //     }
+  //     return copy;
+  //   });
+  // },
   onToken: (token) => {
-    setMessages((prev) => {
-      const copy = [...prev];
-      const last = copy[copy.length - 1];
-      if (last?.type === "streaming") {
-        last.text = (last.text || "") + token;
-      }
-      return copy;
-    });
+  setMessages((prev) => {
+    if (prev.length === 0) return prev;
+
+    const copy = [...prev];
+    const last = copy[copy.length - 1];
+
+    if (last?.type !== "streaming") return prev;
+
+    copy[copy.length - 1] = {
+      ...last,
+      text: (last.text || "") + token,
+    };
+
+    return copy;
+  });
   },
   onDone: (finalPayload) => {
     setMessages((prev) => {

@@ -440,9 +440,13 @@ def guarded_chat_stream(request: ChatRequest, user_id: str = Depends(get_current
         full_answer = ""
         generation_start = time.perf_counter()
 
+        # yield json.dumps({
+        #     "type": "start",
+        #     "request_id": request_id,
+        # }) + "\n"
         yield json.dumps({
-            "type": "start",
-            "request_id": request_id,
+        "type": "token",
+        "token": " ",
         }) + "\n"
 
         for token in stream_answer_with_ollama(user_context, request.text, chunks):
@@ -496,4 +500,13 @@ def guarded_chat_stream(request: ChatRequest, user_id: str = Depends(get_current
 
         yield json.dumps({"type": "final", "data": final_payload}) + "\n"
 
-    return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+    # return StreamingResponse(event_stream(), media_type="application/x-ndjson")
+    return StreamingResponse(
+        event_stream(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+        )

@@ -93,7 +93,7 @@ def generate_answer_with_ollama(user_context: dict, query: str, chunks: list[dic
             "stream": False,
             "options": {
                 "temperature": 0.2,
-                "num_predict": 180,
+                "num_predict": 120,
             },
         },
         timeout=(10, 180),
@@ -117,7 +117,7 @@ def stream_answer_with_ollama(user_context: dict, query: str, chunks: list[dict]
             "stream": True,
             "options": {
                 "temperature": 0.2,
-                "num_predict": 180,
+                "num_predict": 120,
             },
         },
         timeout=(10, 180),
