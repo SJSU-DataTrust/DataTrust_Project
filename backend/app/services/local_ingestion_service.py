@@ -60,7 +60,7 @@ def ingest_local_file(
         "external_doc_id": external_doc_id,
         "external_parent_id": resource_scope_external_id,
         "title": path.name,
-        "resource_path": str(path),
+        "resource_path": f"demo://{department_code}/{level_code}/{path.name}",
         "source_url": None,
         "department_id": department["id"],
         "min_auth_level_id": auth_level["id"],
@@ -97,7 +97,7 @@ def ingest_local_file(
                 "department_id": department["id"],
                 "min_auth_level_id": auth_level["id"],
                 "is_active": True,
-                "resource_path": str(path),
+                "resource_path": f"demo://{department_code}/{level_code}/{path.name}",
                 "metadata": {
                     "filename": path.name
                 },

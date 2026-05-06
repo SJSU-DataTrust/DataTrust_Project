@@ -18,4 +18,14 @@ class Settings:
     JWT_SECRET = os.getenv("JWT_SECRET", "")
     JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 
+    GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+    GITHUB_OWNER = os.getenv("GITHUB_OWNER", "")
+    GITHUB_REPO = os.getenv("GITHUB_REPO", "")
+    GITHUB_BRANCH = os.getenv("GITHUB_BRANCH", "main")
+
+    CONFLUENCE_BASE_URL = os.getenv("CONFLUENCE_BASE_URL", "")
+    CONFLUENCE_EMAIL = os.getenv("CONFLUENCE_EMAIL", "")
+    CONFLUENCE_API_TOKEN = os.getenv("CONFLUENCE_API_TOKEN", "")
+    CONFLUENCE_SPACE_KEY = os.getenv("CONFLUENCE_SPACE_KEY", "")
+    
 settings = Settings()

@@ -1,325 +1,309 @@
 import { useEffect, useState } from "react";
 import {
-  getAdminSummary,
-  getAdminRecentBlocked,
-  getAdminRecentEvents,
-  getAdminRecentChat,
-  getAdminChartData,
-} from "../services/api";
-import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
+  CartesianGrid,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  CartesianGrid,
 } from "recharts";
 
-type Props = {
-  adminUserId: string;
+import {
+  getAdminSummary,
+  getDocumentsBySource,
+  getDocumentsByDepartment,
+  getChunksByLevel,
+  getRecentDocuments,
+  getDataQuality,
+  getConnectorHealth,
+  getIngestionProgress,
+  getPolicyViolationsChart,
+  getUserActivityHeatmap,
+} from "../services/api";
+
+const ADMIN_USER_ID = "e483f8b4-1529-4a2a-a2ae-7922f4d0157a";
+
+const panelStyle: React.CSSProperties = {
+  background: "#0f172a",
+  border: "1px solid #1e293b",
+  borderRadius: 18,
+  padding: 18,
+  color: "white",
 };
 
-function MetricCard({
-  title,
-  value,
-}: {
-  title: string;
-  value: string | number;
-}) {
+function Card({ title, value }: { title: string; value: any }) {
   return (
-    <div
-      style={{
-        background: "linear-gradient(180deg, #0f172a 0%, #0b1325 100%)",
-        border: "1px solid #243041",
-        borderRadius: "18px",
-        padding: "18px",
-        minHeight: "100px",
-        boxShadow: "0 8px 30px rgba(0,0,0,0.18)",
-      }}
-    >
-      <div style={{ fontSize: "13px", color: "#94a3b8", marginBottom: "10px" }}>
-        {title}
-      </div>
-      <div style={{ fontSize: "28px", fontWeight: 800, color: "#f8fafc" }}>
-        {value}
-      </div>
+    <div style={panelStyle}>
+      <div style={{ color: "#94a3b8", fontSize: 13 }}>{title}</div>
+      <div style={{ fontSize: 30, fontWeight: 900, marginTop: 8 }}>{value}</div>
     </div>
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function ChartCard({ title, data }: { title: string; data: any[] }) {
   return (
-    <div
-      style={{
-        marginTop: "18px",
-        background: "linear-gradient(180deg, #0f172a 0%, #0b1325 100%)",
-        border: "1px solid #243041",
-        borderRadius: "18px",
-        padding: "18px",
-        boxShadow: "0 8px 30px rgba(0,0,0,0.18)",
-      }}
-    >
-      <div style={{ fontSize: "16px", fontWeight: 800, color: "#f8fafc", marginBottom: "14px" }}>
-        {title}
-      </div>
-      {children}
+    <div style={{ ...panelStyle, height: 300 }}>
+      <h3 style={{ marginTop: 0 }}>{title}</h3>
+      <ResponsiveContainer width="100%" height={220}>
+        <BarChart data={data}>
+          <XAxis dataKey="name" stroke="#94a3b8" />
+          <YAxis stroke="#94a3b8" />
+          <Tooltip />
+          <Bar dataKey="value" fill="#3b82f6" />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
 
-export default function AdminDashboardPage({ adminUserId }: Props) {
+export default function AdminDashboardPage() {
   const [summary, setSummary] = useState<any>(null);
-  const [blocked, setBlocked] = useState<any[]>([]);
-  const [events, setEvents] = useState<any[]>([]);
-  const [recentChat, setRecentChat] = useState<any[]>([]);
-  const [chartData, setChartData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [bySource, setBySource] = useState<any[]>([]);
+  const [byDepartment, setByDepartment] = useState<any[]>([]);
+  const [byLevel, setByLevel] = useState<any[]>([]);
+  const [recentDocs, setRecentDocs] = useState<any[]>([]);
+  const [quality, setQuality] = useState<any>(null);
+  const [connectorHealth, setConnectorHealth] = useState<any[]>([]);
+  const [ingestionProgress, setIngestionProgress] = useState<any>(null);
+  const [policyChart, setPolicyChart] = useState<any[]>([]);
+  const [heatmap, setHeatmap] = useState<any[]>([]);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function load() {
-      setLoading(true);
+  async function loadDashboard() {
+    try {
       setError("");
 
-      try {
-        const [summaryData, blockedData, eventsData, chatData, charts] = await Promise.all([
-          getAdminSummary(adminUserId),
-          getAdminRecentBlocked(adminUserId),
-          getAdminRecentEvents(adminUserId),
-          getAdminRecentChat(adminUserId),
-          getAdminChartData(adminUserId),
-        ]);
+      const [
+        summaryData,
+        sourceData,
+        deptData,
+        levelData,
+        recentData,
+        qualityData,
+        connectorHealthData,
+        ingestionProgressData,
+        policyChartData,
+        heatmapData,
+      ] = await Promise.all([
+        getAdminSummary(ADMIN_USER_ID),
+        getDocumentsBySource(ADMIN_USER_ID),
+        getDocumentsByDepartment(ADMIN_USER_ID),
+        getChunksByLevel(ADMIN_USER_ID),
+        getRecentDocuments(ADMIN_USER_ID),
+        getDataQuality(ADMIN_USER_ID),
+        getConnectorHealth(ADMIN_USER_ID),
+        getIngestionProgress(ADMIN_USER_ID),
+        getPolicyViolationsChart(ADMIN_USER_ID),
+        getUserActivityHeatmap(ADMIN_USER_ID),
+      ]);
 
-        if (!mounted) return;
-        setSummary(summaryData);
-        setBlocked(blockedData);
-        setEvents(eventsData);
-        setRecentChat(chatData);
-        setChartData(charts);
-      } catch (err: any) {
-        if (!mounted) return;
-        setError(err.message || "Failed to load dashboard");
-      } finally {
-        if (mounted) setLoading(false);
-      }
+      setSummary(summaryData);
+      setBySource(sourceData);
+      setByDepartment(deptData);
+      setByLevel(levelData);
+      setRecentDocs(recentData);
+      setQuality(qualityData);
+      setConnectorHealth(connectorHealthData);
+      setIngestionProgress(ingestionProgressData);
+      setPolicyChart(policyChartData);
+      setHeatmap(heatmapData);
+    } catch (err: any) {
+      setError(err.message || "Failed to load admin dashboard");
     }
+  }
 
-    load();
-    return () => {
-      mounted = false;
-    };
-  }, [adminUserId]);
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+  if (error) {
+    return (
+      <div style={{ padding: 40, color: "#fecaca", background: "#020617", minHeight: "100vh" }}>
+        {error}
+      </div>
+    );
+  }
+
+  if (!summary) {
+    return (
+      <div style={{ padding: 40, color: "white", background: "#020617", minHeight: "100vh" }}>
+        Loading admin dashboard...
+      </div>
+    );
+  }
 
   return (
     <div
       style={{
         minHeight: "100vh",
-        background:
-          "radial-gradient(circle at top left, #172554 0%, #020617 35%, #030712 100%)",
+        background: "radial-gradient(circle at top left, #1e3a8a, #020617 35%)",
         color: "white",
-        padding: "24px",
+        padding: 28,
       }}
     >
-      <div style={{ maxWidth: "1320px", margin: "0 auto" }}>
-        <div style={{ marginBottom: "24px" }}>
-          <div style={{ fontSize: "30px", fontWeight: 900, color: "#f8fafc" }}>
-            DataTrust Admin Dashboard
-          </div>
-          <div style={{ marginTop: "6px", color: "#94a3b8" }}>
-            Security, ingestion, and usage visibility
-          </div>
+      <div style={{ marginBottom: 28, display: "flex", justifyContent: "space-between" }}>
+        <div>
+          <h1 style={{ fontSize: 34, margin: 0 }}>DataTrust Admin Control Center</h1>
+          <p style={{ color: "#94a3b8" }}>
+            Ingestion, authorization, retrieval, policy, connector, and data-quality monitoring.
+          </p>
         </div>
 
-        {loading && <div style={{ color: "#93c5fd" }}>Loading dashboard...</div>}
-        {error && (
-          <div
-            style={{
-              background: "#3f1d1d",
-              color: "#fecaca",
-              border: "1px solid #7f1d1d",
-              borderRadius: "14px",
-              padding: "14px",
-            }}
-          >
-            {error}
-          </div>
-        )}
+        <button
+          onClick={loadDashboard}
+          style={{
+            height: 44,
+            padding: "0 18px",
+            borderRadius: 12,
+            border: "1px solid #2563eb",
+            background: "#1d4ed8",
+            color: "white",
+            fontWeight: 800,
+            cursor: "pointer",
+          }}
+        >
+          Refresh
+        </button>
+      </div>
 
-        {summary && (
-          <>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+        <Card title="Documents" value={summary.total_documents} />
+        <Card title="Active Documents" value={summary.active_documents} />
+        <Card title="Chunks" value={summary.total_chunks} />
+        <Card title="Active Chunks" value={summary.active_chunks} />
+        <Card title="Users" value={summary.total_users} />
+        <Card title="Active Users" value={summary.active_users} />
+        <Card title="Admins" value={summary.admin_users} />
+        <Card title="Data Quality" value={quality?.status || "unknown"} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 24 }}>
+        <div style={panelStyle}>
+          <h2 style={{ marginTop: 0 }}>Connector Health</h2>
+          {connectorHealth.map((c) => (
             <div
+              key={c.source}
               style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                gap: "14px",
+                padding: 12,
+                borderRadius: 14,
+                border: "1px solid #243041",
+                marginBottom: 10,
+                background: c.status === "healthy" ? "#052e16" : "#3f1d1d",
               }}
             >
-              <MetricCard title="Total Users" value={summary.metrics.total_users} />
-              <MetricCard title="Resource Scopes" value={summary.metrics.total_scopes} />
-              <MetricCard title="Documents Indexed" value={summary.metrics.total_documents} />
-              <MetricCard title="Active Chunks" value={summary.metrics.active_chunks} />
-              <MetricCard title="Blocked Requests" value={summary.metrics.blocked_requests} />
-              <MetricCard title="Generated Answers" value={summary.metrics.generated_answers} />
-              <MetricCard title="No Authorized Context" value={summary.metrics.no_authorized_context} />
-              <MetricCard title="Successful Ingestions" value={summary.metrics.successful_ingestions} />
+              <strong>{c.source}</strong> — {c.status}
+              <div style={{ color: "#cbd5e1", marginTop: 4 }}>
+                Documents: {c.document_count} | Failures: {c.failure_count}
+              </div>
+              <div style={{ color: "#94a3b8", fontSize: 12 }}>
+                Last sync: {c.last_sync_at || "Not synced yet"}
+              </div>
             </div>
+          ))}
+        </div>
 
-            {chartData && (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "18px",
-                  marginTop: "18px",
-                }}
-              >
-                <Section title="Request Outcomes">
-                  <div style={{ width: "100%", height: 280 }}>
-                    <ResponsiveContainer>
-                      <BarChart data={chartData.request_outcomes}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="label" stroke="#94a3b8" />
-                        <YAxis stroke="#94a3b8" />
-                        <Tooltip />
-                        <Bar dataKey="value" />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Section>
+        <div style={panelStyle}>
+          <h2 style={{ marginTop: 0 }}>Live Ingestion Progress</h2>
+          <p>Total recent docs: {ingestionProgress?.total_recent_documents ?? 0}</p>
+          <p>Active/updated: {ingestionProgress?.active_or_updated ?? 0}</p>
+          <p>No change: {ingestionProgress?.no_change ?? 0}</p>
+          <p>Failed: {ingestionProgress?.failed ?? 0}</p>
+        </div>
+      </div>
 
-                <Section title="Documents by Department">
-                  <div style={{ width: "100%", height: 280 }}>
-                    <ResponsiveContainer>
-                      <PieChart>
-                        <Pie
-                          data={chartData.documents_by_department}
-                          dataKey="value"
-                          nameKey="label"
-                          outerRadius={90}
-                          label
-                        >
-                          {chartData.documents_by_department.map((_: any, index: number) => (
-                            <Cell key={index} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Section>
-              </div>
-            )}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 18, marginBottom: 24 }}>
+        <ChartCard title="Documents by Source" data={bySource} />
+        <ChartCard title="Documents by Department" data={byDepartment} />
+        <ChartCard title="Chunks by Access Level" data={byLevel} />
+      </div>
 
-            {chartData && (
-              <Section title="Ingestion Events by Type">
-                <div style={{ width: "100%", height: 280 }}>
-                  <ResponsiveContainer>
-                    <BarChart data={chartData.ingestion_events}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="label" stroke="#94a3b8" />
-                      <YAxis stroke="#94a3b8" />
-                      <Tooltip />
-                      <Bar dataKey="value" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </Section>
-            )}
+      <div style={{ ...panelStyle, marginBottom: 24, height: 340 }}>
+        <h2 style={{ marginTop: 0 }}>Policy Violations Over Time</h2>
+        <ResponsiveContainer width="100%" height={250}>
+          <LineChart data={policyChart}>
+            <CartesianGrid stroke="#1e293b" />
+            <XAxis dataKey="date" stroke="#94a3b8" />
+            <YAxis stroke="#94a3b8" />
+            <Tooltip />
+            <Line type="monotone" dataKey="violations" stroke="#ef4444" strokeWidth={3} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
 
-            <Section title="Recent Blocked Requests">
-              <div style={{ display: "grid", gap: "10px" }}>
-                {blocked.length === 0 ? (
-                  <div style={{ color: "#94a3b8" }}>No blocked requests yet.</div>
-                ) : (
-                  blocked.map((item, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        border: "1px solid #243041",
-                        borderRadius: "14px",
-                        padding: "12px",
-                        background: "#101928",
-                      }}
-                    >
-                      <div style={{ fontWeight: 800 }}>{item.reason_category || "BLOCKED"}</div>
-                      <div style={{ marginTop: "4px", color: "#cbd5e1" }}>{item.prompt}</div>
-                      <div style={{ marginTop: "6px", fontSize: "13px", color: "#94a3b8" }}>
-                        {item.email} • {item.department} • {item.auth_level} • Risk {item.risk_score}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </Section>
+      <div style={{ ...panelStyle, marginBottom: 24 }}>
+        <h2 style={{ marginTop: 0 }}>User Activity Heatmap</h2>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(24, 1fr)", gap: 4 }}>
+          {heatmap.map((cell, idx) => (
+            <div
+              key={idx}
+              title={`${cell.day} ${cell.hour}:00 — ${cell.count}`}
+              style={{
+                height: 18,
+                borderRadius: 4,
+                background: cell.count > 0 ? "#2563eb" : "#1e293b",
+                opacity: Math.min(1, 0.25 + cell.count * 0.15),
+              }}
+            />
+          ))}
+        </div>
+      </div>
 
-            <Section title="Recent Ingestion / Sync Events">
-              <div style={{ display: "grid", gap: "10px" }}>
-                {events.length === 0 ? (
-                  <div style={{ color: "#94a3b8" }}>No sync events yet.</div>
-                ) : (
-                  events.map((item, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        border: "1px solid #243041",
-                        borderRadius: "14px",
-                        padding: "12px",
-                        background: "#101928",
-                      }}
-                    >
-                      <div style={{ fontWeight: 800 }}>{item.event_type}</div>
-                      <div style={{ marginTop: "6px", color: "#cbd5e1", fontSize: "14px" }}>
-                        {item.summary.file_path || item.summary.external_doc_id || "No path"}
-                      </div>
-                      <div style={{ marginTop: "6px", fontSize: "13px", color: "#94a3b8" }}>
-                        Source: {item.summary.source_code || "N/A"} • Dept: {item.summary.department_code || "N/A"} • Level: {item.summary.level_code || "N/A"} • Chunks: {item.summary.chunk_count ?? "N/A"}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </Section>
+      <div style={{ ...panelStyle, marginBottom: 24 }}>
+        <h2 style={{ marginTop: 0 }}>Recent Ingested Documents</h2>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", color: "#e5e7eb" }}>
+            <thead>
+              <tr style={{ color: "#93c5fd", textAlign: "left" }}>
+                <th style={th}>Title</th>
+                <th style={th}>Source</th>
+                <th style={th}>Department</th>
+                <th style={th}>Level</th>
+                <th style={th}>Status</th>
+                <th style={th}>Path</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentDocs.map((doc) => (
+                <tr key={doc.id} style={{ borderTop: "1px solid #1e293b" }}>
+                  <td style={td}>{doc.title}</td>
+                  <td style={td}>{doc.source_systems?.code}</td>
+                  <td style={td}>{doc.departments?.code}</td>
+                  <td style={td}>{doc.auth_levels?.code}</td>
+                  <td style={td}>{doc.sync_status}</td>
+                  <td style={td}>{doc.resource_path}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-            <Section title="Recent Chat Activity">
-              <div style={{ display: "grid", gap: "10px" }}>
-                {recentChat.length === 0 ? (
-                  <div style={{ color: "#94a3b8" }}>No chat activity yet.</div>
-                ) : (
-                  recentChat.map((item, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        border: "1px solid #243041",
-                        borderRadius: "14px",
-                        padding: "12px",
-                        background: "#101928",
-                      }}
-                    >
-                      <div style={{ fontWeight: 800 }}>{item.event_type}</div>
-                      <div style={{ marginTop: "4px", color: "#cbd5e1" }}>{item.query}</div>
-                      <div style={{ marginTop: "6px", fontSize: "13px", color: "#94a3b8" }}>
-                        Status: {item.status || "N/A"} • Request ID: {item.request_id || "N/A"}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </Section>
-          </>
-        )}
+      <div
+        style={{
+          ...panelStyle,
+          background: quality?.status === "healthy" ? "#052e16" : "#3f1d1d",
+        }}
+      >
+        <h2 style={{ marginTop: 0 }}>Data Quality</h2>
+        <p>Local path issues: {quality?.local_path_issues}</p>
+        <p>Empty chunks: {quality?.empty_chunks}</p>
+        <p>Inactive chunks: {quality?.inactive_chunks}</p>
       </div>
     </div>
   );
 }
+
+const th: React.CSSProperties = {
+  padding: "10px",
+  fontSize: 13,
+  borderBottom: "1px solid #334155",
+};
+
+const td: React.CSSProperties = {
+  padding: "10px",
+  fontSize: 13,
+  color: "#cbd5e1",
+};

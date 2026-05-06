@@ -11,9 +11,12 @@ from app.services.authz_service import get_user_context
 from app.services.request_understanding_service import understand_request
 from app.services.policy_service import analyze_text
 from app.services.vector_retrieval_service import retrieve_authorized_chunks
+from app.services.query_routing_service import decide_query_route
 from app.services.generation_service import (
     generate_answer_with_ollama,
     stream_answer_with_ollama,
+    generate_general_answer_with_ollama,
+    stream_general_answer_with_ollama,
 )
 from app.services.output_guard_service import validate_generated_answer
 from app.services.audit_service import log_policy_event
@@ -206,6 +209,56 @@ def guarded_chat(request: ChatRequest, user_id: str = Depends(get_current_user_i
             },
         }
         return response
+    
+    route_decision = decide_query_route(request.text)
+    if route_decision["route"] == "general_concept":
+        t_gen = time.perf_counter()
+        answer = generate_general_answer_with_ollama(request.text)
+        generation_ms = round((time.perf_counter() - t_gen) * 1000, 2)
+
+        output_check = validate_generated_answer(answer)
+        final_status = "allowed" if output_check["status"] == "clean" else "allowed_with_redaction"
+
+        response = {
+            "status": final_status,
+            "answer": output_check["answer"],
+            "policy": {
+                **build_policy_response(policy_result, understanding),
+                "code": None,
+                "reason_category": None,
+                "user_safe_explanation": None,
+                "suggested_safe_alternative": None,
+            },
+            "selected_sources": [],
+            "source_references": [],
+            "retrieval_count": 0,
+            "metadata": {
+                "request_id": request_id,
+                "normalized_text": understanding["normalized_text"],
+                "query_route": route_decision,
+                "output_validation": output_check["status"],
+                "output_hits": output_check["hits"],
+                "timings_ms": {
+                    "user_context": user_context_ms,
+                    "policy": policy_ms,
+                    "retrieval": 0,
+                    "generation": generation_ms,
+                    "total": round((time.perf_counter() - total_start) * 1000, 2),
+                },
+            },
+        }
+
+        log_policy_event(
+            event_type="CHAT_GENERAL_CONCEPT_RESPONSE",
+            payload={
+                "request_id": request_id,
+                "user_id": user_context["user_id"],
+                "query": request.text,
+                "response": response,
+            },
+        )
+
+        return response
 
     try:
         t2 = time.perf_counter()
@@ -391,6 +444,63 @@ def guarded_chat_stream(request: ChatRequest, user_id: str = Depends(get_current
 
         return StreamingResponse(small_talk_stream(), media_type="application/x-ndjson")
 
+    route_decision = decide_query_route(request.text)
+    if route_decision["route"] == "general_concept":
+        def general_concept_stream():
+            full_answer = ""
+            generation_start = time.perf_counter()
+
+            yield json.dumps({"type": "token", "token": " "}) + "\n"
+
+            for token in stream_general_answer_with_ollama(request.text):
+                full_answer += token
+                yield json.dumps({"type": "token", "token": token}) + "\n"
+
+            generation_ms = round((time.perf_counter() - generation_start) * 1000, 2)
+            output_check = validate_generated_answer(full_answer)
+            final_status = "allowed" if output_check["status"] == "clean" else "allowed_with_redaction"
+
+            final_payload = {
+                "status": final_status,
+                "answer": output_check["answer"],
+                "policy": {
+                    **build_policy_response(policy_result, understanding),
+                    "code": None,
+                    "reason_category": None,
+                    "user_safe_explanation": None,
+                    "suggested_safe_alternative": None,
+                },
+                "selected_sources": [],
+                "source_references": [],
+                "retrieval_count": 0,
+                "metadata": {
+                    "request_id": request_id,
+                    "normalized_text": understanding["normalized_text"],
+                    "query_route": route_decision,
+                    "output_validation": output_check["status"],
+                    "output_hits": output_check["hits"],
+                    "timings_ms": {
+                        "user_context": user_context_ms,
+                        "policy": policy_ms,
+                        "retrieval": 0,
+                        "generation": generation_ms,
+                        "total": round((time.perf_counter() - total_start) * 1000, 2),
+                    },
+                },
+            }
+
+            yield json.dumps({"type": "final", "data": final_payload}) + "\n"
+
+        return StreamingResponse(
+            general_concept_stream(),
+            media_type="application/x-ndjson",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            },
+        )
+    
     t2 = time.perf_counter()
     retrieval = retrieve_authorized_chunks(request.text, user_context, top_k=request.top_k)
     chunks = retrieval["chunks"]

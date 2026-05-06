@@ -11,3 +11,4 @@ def debug_retrieve(payload: dict, user_id: str = Depends(get_current_user_id)):
     query = payload.get("text", "")
     result = retrieve_authorized_chunks(query, user_context, top_k=payload.get("top_k", 5))
     return result
+
