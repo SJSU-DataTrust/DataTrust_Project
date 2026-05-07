@@ -22,6 +22,9 @@ import {
   getIngestionProgress,
   getPolicyViolationsChart,
   getUserActivityHeatmap,
+  runConfluenceSync,
+  runGithubSync,
+  runGoogleDriveSync,
 } from "../services/api";
 
 const ADMIN_USER_ID = "e483f8b4-1529-4a2a-a2ae-7922f4d0157a";
@@ -32,6 +35,16 @@ const panelStyle: React.CSSProperties = {
   borderRadius: 18,
   padding: 18,
   color: "white",
+};
+const buttonStyle: React.CSSProperties = {
+  height: 44,
+  padding: "0 16px",
+  borderRadius: 12,
+  border: "1px solid #2563eb",
+  background: "#1d4ed8",
+  color: "white",
+  fontWeight: 800,
+  cursor: "pointer",
 };
 
 function Card({ title, value }: { title: string; value: any }) {
@@ -71,53 +84,146 @@ export default function AdminDashboardPage() {
   const [policyChart, setPolicyChart] = useState<any[]>([]);
   const [heatmap, setHeatmap] = useState<any[]>([]);
   const [error, setError] = useState("");
+  const [syncStatus, setSyncStatus] = useState("");
+  const [syncing, setSyncing] = useState(false);
 
-  async function loadDashboard() {
+  {syncStatus && (
+  <div
+    style={{
+      marginBottom: 18,
+      padding: 14,
+      borderRadius: 14,
+      background: syncStatus.includes("failed") ? "#3f1d1d" : "#052e16",
+      border: "1px solid #334155",
+      color: "#e5e7eb",
+    }}
+  >
+    {syncStatus}
+  </div>
+)}
+
+  async function loadDashboard(showError = true) {
     try {
       setError("");
 
-      const [
-        summaryData,
-        sourceData,
-        deptData,
-        levelData,
-        recentData,
-        qualityData,
-        connectorHealthData,
-        ingestionProgressData,
-        policyChartData,
-        heatmapData,
-      ] = await Promise.all([
-        getAdminSummary(ADMIN_USER_ID),
-        getDocumentsBySource(ADMIN_USER_ID),
-        getDocumentsByDepartment(ADMIN_USER_ID),
-        getChunksByLevel(ADMIN_USER_ID),
-        getRecentDocuments(ADMIN_USER_ID),
-        getDataQuality(ADMIN_USER_ID),
-        getConnectorHealth(ADMIN_USER_ID),
-        getIngestionProgress(ADMIN_USER_ID),
-        getPolicyViolationsChart(ADMIN_USER_ID),
-        getUserActivityHeatmap(ADMIN_USER_ID),
-      ]);
+    //   const [
+    //     summaryData,
+    //     sourceData,
+    //     deptData,
+    //     levelData,
+    //     recentData,
+    //     qualityData,
+    //     connectorHealthData,
+    //     ingestionProgressData,
+    //     policyChartData,
+    //     heatmapData,
+    // ] = await Promise.all([
+    //     getAdminSummary(ADMIN_USER_ID),
+    //     getDocumentsBySource(ADMIN_USER_ID),
+    //     getDocumentsByDepartment(ADMIN_USER_ID),
+    //     getChunksByLevel(ADMIN_USER_ID),
+    //     getRecentDocuments(ADMIN_USER_ID),
+    //     getDataQuality(ADMIN_USER_ID),
+    //     getConnectorHealth(ADMIN_USER_ID),
+    //     getIngestionProgress(ADMIN_USER_ID),
+    //     getPolicyViolationsChart(ADMIN_USER_ID),
+    //     getUserActivityHeatmap(ADMIN_USER_ID),
+    //   ]);
 
-      setSummary(summaryData);
-      setBySource(sourceData);
-      setByDepartment(deptData);
-      setByLevel(levelData);
-      setRecentDocs(recentData);
-      setQuality(qualityData);
-      setConnectorHealth(connectorHealthData);
-      setIngestionProgress(ingestionProgressData);
-      setPolicyChart(policyChartData);
-      setHeatmap(heatmapData);
-    } catch (err: any) {
+    //   setSummary(summaryData);
+    //   setBySource(sourceData);
+    //   setByDepartment(deptData);
+    //   setByLevel(levelData);
+    //   setRecentDocs(recentData);
+    //   setQuality(qualityData);
+    //   setConnectorHealth(connectorHealthData);
+    //   setIngestionProgress(ingestionProgressData);
+    //   setPolicyChart(policyChartData);
+    //   setHeatmap(heatmapData);
+    const results = await Promise.allSettled([
+  getAdminSummary(ADMIN_USER_ID),
+  getDocumentsBySource(ADMIN_USER_ID),
+  getDocumentsByDepartment(ADMIN_USER_ID),
+  getChunksByLevel(ADMIN_USER_ID),
+  getRecentDocuments(ADMIN_USER_ID),
+  getDataQuality(ADMIN_USER_ID),
+  getConnectorHealth(ADMIN_USER_ID),
+  getIngestionProgress(ADMIN_USER_ID),
+  getPolicyViolationsChart(ADMIN_USER_ID),
+  getUserActivityHeatmap(ADMIN_USER_ID),
+]);
+
+const value = (i: number, fallback: any) =>
+  results[i].status === "fulfilled" ? results[i].value : fallback;
+
+setSummary(value(0, summary));
+setBySource(value(1, bySource));
+setByDepartment(value(2, byDepartment));
+setByLevel(value(3, byLevel));
+setRecentDocs(value(4, recentDocs));
+setQuality(value(5, quality));
+setConnectorHealth(value(6, connectorHealth));
+setIngestionProgress(value(7, ingestionProgress));
+setPolicyChart(value(8, policyChart));
+setHeatmap(value(9, heatmap));
+    }catch (err: any) {
+      if (showError) {
       setError(err.message || "Failed to load admin dashboard");
+  }
+}
+  }
+
+  async function runSync(name: "confluence" | "github" | "drive") {
+  try {
+    setSyncing(true);
+    setSyncStatus(`Running ${name} sync...`);
+
+    let result;
+
+    if (name === "confluence") {
+      result = await runConfluenceSync(ADMIN_USER_ID);
+    } else if (name === "github") {
+      result = await runGithubSync(ADMIN_USER_ID);
+    } else {
+      result = await runGoogleDriveSync(ADMIN_USER_ID);
+    }
+
+    setSyncStatus(
+      `${name} sync finished: ingested=${result.ingested_count}, skipped=${result.skipped_count}, failed=${result.failed_count ?? 0}`
+    );
+
+    await loadDashboard();
+  } catch (err: any) {
+    setSyncStatus(`${name} sync failed: ${err.message}`);
+  } finally {
+    setSyncing(false);
+  }
+}
+
+  useEffect(() => {
+  let stopped = false;
+  let running = false;
+
+  async function poll() {
+    if (stopped || running) return;
+
+    running = true;
+    try {
+      await loadDashboard(true);
+    } finally {
+      running = false;
     }
   }
 
-  useEffect(() => {
-    loadDashboard();
-  }, []);
+  poll();
+
+  //const interval = window.setInterval(poll, 50000);
+
+  return () => {
+    stopped = true;
+    //window.clearInterval(interval);
+  };
+}, []);
 
   if (error) {
     return (
@@ -153,7 +259,7 @@ export default function AdminDashboardPage() {
         </div>
 
         <button
-          onClick={loadDashboard}
+          onClick={() => loadDashboard(true)}
           style={{
             height: 44,
             padding: "0 18px",
@@ -169,6 +275,20 @@ export default function AdminDashboardPage() {
         </button>
       </div>
 
+          <div style={{ display: "flex", gap: 10 }}>
+  <button onClick={() => runSync("confluence")} disabled={syncing} style={buttonStyle}>
+    Sync Confluence
+  </button>
+  <button onClick={() => runSync("github")} disabled={syncing} style={buttonStyle}>
+    Sync GitHub
+  </button>
+  <button onClick={() => runSync("drive")} disabled={syncing} style={buttonStyle}>
+    Sync Drive
+  </button>
+  <button onClick={() => loadDashboard(true)} style={buttonStyle}>
+  Refresh
+</button>
+</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
         <Card title="Documents" value={summary.total_documents} />
         <Card title="Active Documents" value={summary.active_documents} />
@@ -233,23 +353,44 @@ export default function AdminDashboardPage() {
         </ResponsiveContainer>
       </div>
 
-      <div style={{ ...panelStyle, marginBottom: 24 }}>
-        <h2 style={{ marginTop: 0 }}>User Activity Heatmap</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(24, 1fr)", gap: 4 }}>
-          {heatmap.map((cell, idx) => (
-            <div
-              key={idx}
-              title={`${cell.day} ${cell.hour}:00 — ${cell.count}`}
-              style={{
-                height: 18,
-                borderRadius: 4,
-                background: cell.count > 0 ? "#2563eb" : "#1e293b",
-                opacity: Math.min(1, 0.25 + cell.count * 0.15),
-              }}
-            />
-          ))}
-        </div>
-      </div>
+     <div style={{ ...panelStyle, marginBottom: 24 }}>
+  <h2 style={{ marginTop: 0 }}>User Activity Heatmap — Last 6 Weeks</h2>
+
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns: "repeat(7, 1fr)",
+      gap: 6,
+      marginTop: 14,
+      maxWidth: 720,
+    }}
+  >
+    {heatmap.map((cell, idx) => (
+      <div
+        key={idx}
+        title={`${cell.date} (${cell.day}) — ${cell.count} events`}
+        style={{
+          height: 34,
+          borderRadius: 8,
+          background:
+            cell.count >= 12
+              ? "#1d4ed8"
+              : cell.count >= 6
+              ? "#2563eb"
+              : cell.count >= 1
+              ? "#60a5fa"
+              : "#1e293b",
+          opacity: cell.count > 0 ? 1 : 0.35,
+          border: "1px solid #334155",
+        }}
+      />
+    ))}
+  </div>
+
+  <div style={{ marginTop: 10, color: "#94a3b8", fontSize: 12 }}>
+    Each cell is one day. Each row is one week.
+  </div>
+</div>
 
       <div style={{ ...panelStyle, marginBottom: 24 }}>
         <h2 style={{ marginTop: 0 }}>Recent Ingested Documents</h2>

@@ -1,4 +1,4 @@
-const BACKEND_URL = "http://localhost:8000";
+const BACKEND_URL = "/api";
 
 export async function login(email: string, password: string): Promise<string> {
   const res = await fetch(`${BACKEND_URL}/auth/login`, {
@@ -213,4 +213,56 @@ export function getPolicyViolationsChart(userId: string) {
 
 export function getUserActivityHeatmap(userId: string) {
   return adminGet("/admin/user-activity-heatmap", userId);
+}
+
+async function adminPost(path: string, userId: string) {
+  const res = await fetch(`/api${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-User-Id": userId,
+    },
+  });
+
+  const text = await res.text();
+
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    throw new Error(`Backend returned non-JSON response: ${text.slice(0, 120)}`);
+  }
+
+  if (!res.ok) {
+    throw new Error(data?.detail || `Failed to call ${path}`);
+  }
+
+  return data;
+}
+
+export function runGithubSync(userId: string) {
+  return adminPost("/ingest/github", userId);
+}
+
+export function runGoogleDriveSync(userId: string) {
+  return adminPost("/ingest/google-drive", userId);
+}
+
+export async function runConfluenceSync(userId: string) {
+  const res = await fetch(`/api/ingest/confluence`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-User-Id": userId,
+    },
+    body: JSON.stringify({ space_key: "BC", max_pages: 100 }),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data?.detail || "Confluence sync failed");
+  }
+
+  return data;
 }

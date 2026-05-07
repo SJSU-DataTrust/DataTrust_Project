@@ -2,6 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.core.security import get_current_user_id
 from app.services.authz_service import get_user_context
 from app.db.supabase_client import supabase
+from app.db.mongodb_client import get_mongo_db
+from datetime import datetime
+from collections import defaultdict
 
 router = APIRouter()
 
@@ -133,10 +136,24 @@ def recent_policy_events(user_id: str = Depends(get_current_user_id)):
 def admin_data_quality(user_id: str = Depends(get_current_user_id)):
     require_admin(user_id)
 
-    docs = supabase.table("documents").select("*").execute().data or []
-    chunks = supabase.table("document_chunks").select("*").execute().data or []
+    docs = (
+        supabase.table("documents")
+        .select("id,resource_path,is_active")
+        .execute()
+        .data
+        or []
+    )
 
-    local_paths = [
+    chunks = (
+        supabase.table("document_chunks")
+        .select("id,resource_path,is_active,chunk_text")
+        .limit(5000)
+        .execute()
+        .data
+        or []
+    )
+
+    local_path_issues = [
         c for c in chunks
         if str(c.get("resource_path", "")).startswith(("/Users/", "/home/"))
     ]
@@ -151,11 +168,12 @@ def admin_data_quality(user_id: str = Depends(get_current_user_id)):
     return {
         "document_count": len(docs),
         "chunk_count": len(chunks),
-        "local_path_issues": len(local_paths),
+        "local_path_issues": len(local_path_issues),
         "empty_chunks": len(empty_chunks),
         "inactive_chunks": len(inactive_chunks),
-        "status": "healthy" if not local_paths and not empty_chunks else "needs_attention",
+        "status": "healthy" if not local_path_issues and not empty_chunks else "needs_attention",
     }
+
 
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
@@ -222,28 +240,50 @@ def ingestion_progress(user_id: str = Depends(get_current_user_id)):
 def policy_violations_chart(user_id: str = Depends(get_current_user_id)):
     require_admin(user_id)
 
-    try:
-        events = (
-            supabase.table("policy_events")
-            .select("*")
-            .order("created_at", desc=True)
-            .limit(500)
-            .execute()
-            .data
-            or []
+    db = get_mongo_db()
+
+    events = list(
+        db.audit_logs.find(
+            {},
+            {
+                "event_type": 1,
+                "created_at": 1,
+                "payload.result.decision": 1,
+                "payload.policy.decision": 1,
+                "payload.response.policy.decision": 1,
+            },
         )
-    except Exception:
-        return []
+        .sort("created_at", -1)
+        .limit(1000)
+    )
 
     counts = defaultdict(int)
 
     for e in events:
-        event_type = e.get("event_type", "UNKNOWN")
-        created_at = e.get("created_at", "")
-        day = created_at[:10] if created_at else "unknown"
+        event_type = str(e.get("event_type", "")).upper()
 
-        if "BLOCK" in event_type.upper() or "DENIED" in event_type.upper():
-            counts[day] += 1
+        result_decision = (
+            e.get("payload", {}).get("result", {}).get("decision")
+            or e.get("payload", {}).get("policy", {}).get("decision")
+            or e.get("payload", {}).get("response", {}).get("policy", {}).get("decision")
+        )
+
+        is_violation = (
+            "BLOCK" in event_type
+            or "DENIED" in event_type
+            or result_decision == "block"
+        )
+
+        if not is_violation:
+            continue
+
+        created_at = e.get("created_at")
+        if isinstance(created_at, datetime):
+            day = created_at.strftime("%Y-%m-%d")
+        else:
+            day = str(created_at)[:10]
+
+        counts[day] += 1
 
     return [{"date": k, "violations": v} for k, v in sorted(counts.items())]
 
@@ -252,42 +292,91 @@ def policy_violations_chart(user_id: str = Depends(get_current_user_id)):
 def user_activity_heatmap(user_id: str = Depends(get_current_user_id)):
     require_admin(user_id)
 
-    try:
-        events = (
-            supabase.table("policy_events")
-            .select("*")
-            .order("created_at", desc=True)
-            .limit(1000)
-            .execute()
-            .data
-            or []
-        )
-    except Exception:
-        return []
+    db = get_mongo_db()
 
-    heatmap = defaultdict(int)
+    now = datetime.utcnow().date()
+    start = now - timedelta(weeks=6)
+
+    events = list(
+        db.audit_logs.find(
+            {"created_at": {"$gte": datetime.combine(start, datetime.min.time())}},
+            {"created_at": 1},
+        )
+        .sort("created_at", -1)
+        .limit(5000)
+    )
+
+    counts = defaultdict(int)
 
     for e in events:
         created_at = e.get("created_at")
-        if not created_at:
+        if not isinstance(created_at, datetime):
             continue
 
-        try:
-            dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-            key = f"{dt.strftime('%a')}-{dt.hour}"
-            heatmap[key] += 1
-        except Exception:
-            continue
+        date_key = created_at.date().strftime("%Y-%m-%d")
+        counts[date_key] += 1
 
     result = []
-    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    current = start
 
-    for day in days:
-        for hour in range(24):
-            result.append({
-                "day": day,
-                "hour": hour,
-                "count": heatmap.get(f"{day}-{hour}", 0),
-            })
+    while current <= now:
+        date_key = current.strftime("%Y-%m-%d")
+        result.append({
+            "date": date_key,
+            "day": current.strftime("%a"),
+            "week": current.isocalendar().week,
+            "count": counts.get(date_key, 0),
+        })
+        current += timedelta(days=1)
 
     return result
+
+@router.get("/admin/recent-blocked")
+def recent_blocked(user_id: str = Depends(get_current_user_id)):
+    require_admin(user_id)
+
+    db = get_mongo_db()
+
+    events = list(
+        db.audit_logs.find(
+            {
+                "$or": [
+                    {"event_type": {"$regex": "BLOCK", "$options": "i"}},
+                    {"payload.result.decision": "block"},
+                    {"payload.policy.decision": "block"},
+                    {"payload.response.policy.decision": "block"},
+                ]
+            }
+        )
+        .sort("created_at", -1)
+        .limit(20)
+    )
+
+    output = []
+
+    for e in events:
+        payload = e.get("payload", {})
+
+        output.append({
+            "id": str(e.get("_id")),
+            "event_type": e.get("event_type"),
+            "created_at": e.get("created_at").isoformat() if e.get("created_at") else None,
+            "query": (
+                payload.get("query")
+                or payload.get("input", {}).get("original_text")
+                or payload.get("response", {}).get("metadata", {}).get("normalized_text")
+            ),
+            "user_id": payload.get("user_id") or payload.get("user", {}).get("user_id"),
+            "department": payload.get("user", {}).get("department"),
+            "auth_level": payload.get("user", {}).get("auth_level"),
+            "reason": (
+                payload.get("policy", {}).get("reason_category")
+                or payload.get("result", {}).get("reason_category")
+            ),
+            "risk_score": (
+                payload.get("policy", {}).get("risk_score")
+                or payload.get("result", {}).get("risk_score")
+            ),
+        })
+
+    return output

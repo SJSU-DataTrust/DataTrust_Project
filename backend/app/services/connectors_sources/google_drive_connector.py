@@ -1,56 +1,53 @@
 import io
-import os
+import csv
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
+from app.core.config import settings
 
 
 SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
-EXPORT_MIME_MAP = {
-    "application/vnd.google-apps.document": "text/plain",
-    "application/vnd.google-apps.presentation": "text/plain",
-    "application/vnd.google-apps.spreadsheet": "text/csv",
-}
-
 
 def get_drive_service():
-    creds_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-    if not creds_path:
-        raise ValueError("GOOGLE_APPLICATION_CREDENTIALS is not set")
-
     creds = service_account.Credentials.from_service_account_file(
-        creds_path,
+        settings.GOOGLE_DRIVE_SERVICE_ACCOUNT_FILE,
         scopes=SCOPES,
     )
-
     return build("drive", "v3", credentials=creds)
 
 
-def list_files_in_folder(folder_id: str, max_files: int = 20) -> list[dict]:
+def list_files_in_folder(folder_id: str) -> list[dict]:
     service = get_drive_service()
 
-    query = f"'{folder_id}' in parents and trashed = false"
+    query = f"'{folder_id}' in parents and trashed=false"
 
     res = service.files().list(
         q=query,
-        pageSize=max_files,
-        fields="files(id,name,mimeType,webViewLink,capabilities)",
+        fields="files(id,name,mimeType,modifiedTime,webViewLink)",
+        pageSize=100,
     ).execute()
 
     return res.get("files", [])
 
 
-def download_drive_file(file_id: str, mime_type: str) -> str:
+def download_file_text(file_id: str, mime_type: str) -> str:
     service = get_drive_service()
 
-    if mime_type in EXPORT_MIME_MAP:
+    if mime_type == "text/csv":
+        request = service.files().get_media(fileId=file_id)
+    elif mime_type == "application/vnd.google-apps.spreadsheet":
         request = service.files().export_media(
             fileId=file_id,
-            mimeType=EXPORT_MIME_MAP[mime_type],
+            mimeType="text/csv",
+        )
+    elif mime_type == "application/vnd.google-apps.document":
+        request = service.files().export_media(
+            fileId=file_id,
+            mimeType="text/plain",
         )
     else:
-        request = service.files().get_media(fileId=file_id)
+        return ""
 
     fh = io.BytesIO()
     downloader = MediaIoBaseDownload(fh, request)
@@ -59,4 +56,22 @@ def download_drive_file(file_id: str, mime_type: str) -> str:
     while not done:
         _, done = downloader.next_chunk()
 
-    return fh.getvalue().decode("utf-8", errors="ignore")
+    raw = fh.getvalue().decode("utf-8", errors="ignore")
+
+    if mime_type in ["text/csv", "application/vnd.google-apps.spreadsheet"]:
+        return csv_to_text(raw)
+
+    return raw
+
+
+def csv_to_text(raw_csv: str) -> str:
+    reader = csv.DictReader(io.StringIO(raw_csv))
+    rows = []
+
+    for idx, row in enumerate(reader, start=1):
+        line = f"Row {idx}: " + "; ".join(
+            f"{k}={v}" for k, v in row.items() if v is not None
+        )
+        rows.append(line)
+
+    return "\n".join(rows)

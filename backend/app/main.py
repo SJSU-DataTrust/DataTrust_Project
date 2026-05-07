@@ -14,9 +14,11 @@ import requests
 from app.core.config import settings
 from app.services.embedding_service import generate_embedding
 from app.routers.data_quality import router as data_quality_router
-from app.routers.github_connect import router as github_connector_router
+#from app.routers.github_connect import router as github_connector_router
 from app.routers.confluence_ingest import router as confluence_connector_router
-from app.routers.google_drive_connector import router as google_drive_connector_router
+#from app.routers.google_drive_ingest import router as google_drive_connector_router
+from app.routers.github_ingest import router as github_ingest_router
+from app.routers.google_drive_ingest import router as google_drive_ingest_router
 
 app = FastAPI(title="DataTrust Backend")
 
@@ -69,6 +71,6 @@ app.include_router(debug_router, tags=["debug"])
 app.include_router(local_ingestion_router, tags=["local-ingestion"])
 app.include_router(admin_router, tags=["admin"])
 app.include_router(data_quality_router, tags=["verification"])
-app.include_router(github_connector_router, tags=["github"])
 app.include_router(confluence_connector_router, tags=["confluence"])
-app.include_router(google_drive_connector_router, tags=["google-drive"])
+app.include_router(github_ingest_router, tags=["github-ingestion"])
+app.include_router(google_drive_ingest_router, tags=["google-drive-ingestion"])
