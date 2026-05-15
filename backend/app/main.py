@@ -50,6 +50,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://136.111.123.202",
+        "http://136.111.123.202.nip.io",
         "http://localhost:3000",
         "http://localhost:5173",
         "http://127.0.0.1:3000",
