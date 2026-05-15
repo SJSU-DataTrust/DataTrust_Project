@@ -19,6 +19,7 @@ from app.routers.confluence_ingest import router as confluence_connector_router
 #from app.routers.google_drive_ingest import router as google_drive_connector_router
 from app.routers.github_ingest import router as github_ingest_router
 from app.routers.google_drive_ingest import router as google_drive_ingest_router
+from app.routers import chat_history
 
 app = FastAPI(title="DataTrust Backend")
 
@@ -74,3 +75,4 @@ app.include_router(data_quality_router, tags=["verification"])
 app.include_router(confluence_connector_router, tags=["confluence"])
 app.include_router(github_ingest_router, tags=["github-ingestion"])
 app.include_router(google_drive_ingest_router, tags=["google-drive-ingestion"])
+app.include_router(chat_history.router)

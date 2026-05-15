@@ -1,5 +1,12 @@
-import { useMemo, useState } from "react";
-import { streamChat } from "../services/api";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth0 } from "@auth0/auth0-react";
+import {
+  streamChatWithToken,
+  getChatHistory,
+  saveChatSession,
+  updateChatSession,
+  deleteChatSession,
+} from "../services/api";
 
 type ChatApiResponse = {
   status: string;
@@ -38,51 +45,13 @@ type ChatMessage =
   | { type: "streaming"; text: string }
   | { type: "system"; text: string };
 
-type DemoUser = {
-  key: string;
-  label: string;
-  userId: string;
-  department: string;
-  level: string;
+type Conversation = {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  createdAt: string;
+  updatedAt: string;
 };
-
-const DEMO_USERS: DemoUser[] = [
-  {
-    key: "tech-l1",
-    label: "Tech L1",
-    userId: "a9285829-1226-494c-ab8e-82fd49af258f",
-    department: "TECH",
-    level: "L1",
-  },
-  {
-    key: "tech-l2",
-    label: "Tech L2",
-    userId: "c68c63d4-707c-4e82-896e-dd5fc2704371",
-    department: "TECH",
-    level: "L2",
-  },
-  {
-    key: "tech-l3",
-    label: "Tech L3",
-    userId: "a9f4626e-391e-48b9-9134-8f95863d4601",
-    department: "TECH",
-    level: "L3",
-  },
-  {
-    key: "hr-l1",
-    label: "HR L1",
-    userId: "1edab7be-5f84-4334-aedb-6046eafb7263",
-    department: "HR",
-    level: "L1",
-  },
-  {
-    key: "hr-l3",
-    label: "HR L3",
-    userId: "2e857853-a2a9-4334-be36-4861e6aba2cc",
-    department: "HR",
-    level: "L3",
-  },
-];
 
 function Pill({
   children,
@@ -116,13 +85,7 @@ function Pill({
   );
 }
 
-function SectionCard({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div
       style={{
@@ -139,39 +102,12 @@ function SectionCard({
           fontWeight: 800,
           color: "#cbd5e1",
           marginBottom: "10px",
-          letterSpacing: "0.02em",
         }}
       >
         {title}
       </div>
       {children}
     </div>
-  );
-}
-
-function SidebarButton({
-  children,
-  onClick,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        width: "100%",
-        padding: "12px 14px",
-        borderRadius: "14px",
-        border: "1px solid #253245",
-        background: "linear-gradient(180deg, #111827 0%, #0b1220 100%)",
-        color: "#f8fafc",
-        cursor: "pointer",
-        fontWeight: 700,
-      }}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -185,26 +121,23 @@ function BlockedMessageCard({ data }: { data: ChatApiResponse }) {
         borderRadius: "22px",
         padding: "18px",
         color: "#fee2e2",
-        boxShadow: "0 8px 30px rgba(0,0,0,0.2)",
       }}
     >
       <div style={{ fontSize: "16px", fontWeight: 900, marginBottom: "12px" }}>
         Request blocked by policy
       </div>
 
-      <div style={{ marginBottom: "12px" }}>
-        <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
-          Decision: {data.policy.decision}
-        </Pill>
-        <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
-          Category: {data.policy.reason_category || "RESTRICTED_REQUEST"}
-        </Pill>
-        <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
-          Risk: {data.policy.risk_level} ({data.policy.risk_score})
-        </Pill>
-      </div>
+      <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
+        Decision: {data.policy.decision}
+      </Pill>
+      <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
+        Category: {data.policy.reason_category || "RESTRICTED_REQUEST"}
+      </Pill>
+      <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
+        Risk: {data.policy.risk_level} ({data.policy.risk_score})
+      </Pill>
 
-      <div style={{ color: "#ffe4e6", lineHeight: 1.65 }}>
+      <div style={{ marginTop: 12, lineHeight: 1.65 }}>
         {data.policy.user_safe_explanation || "This request is restricted by policy."}
       </div>
 
@@ -215,8 +148,6 @@ function BlockedMessageCard({ data }: { data: ChatApiResponse }) {
             padding: "12px",
             borderRadius: "14px",
             background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            color: "#fecdd3",
           }}
         >
           <strong>Try instead:</strong> {data.policy.suggested_safe_alternative}
@@ -225,18 +156,11 @@ function BlockedMessageCard({ data }: { data: ChatApiResponse }) {
 
       {data.policy.matched_rules?.length > 0 && (
         <SectionCard title="Matched policy rules">
-          <div>
-            {data.policy.matched_rules.map((rule) => (
-              <Pill
-                key={rule}
-                background="#3f1d1d"
-                color="#fecaca"
-                border="#7f1d1d"
-              >
-                {rule}
-              </Pill>
-            ))}
-          </div>
+          {data.policy.matched_rules.map((rule) => (
+            <Pill key={rule} background="#3f1d1d" color="#fecaca" border="#7f1d1d">
+              {rule}
+            </Pill>
+          ))}
         </SectionCard>
       )}
     </div>
@@ -253,10 +177,9 @@ function AnswerCard({ data }: { data: ChatApiResponse }) {
         borderRadius: "22px",
         padding: "18px",
         color: "#e5e7eb",
-        boxShadow: "0 8px 30px rgba(0,0,0,0.18)",
       }}
     >
-      <div style={{ marginBottom: "10px" }}>
+      <div>
         <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
           Decision: {data.policy.decision}
         </Pill>
@@ -288,11 +211,9 @@ function AnswerCard({ data }: { data: ChatApiResponse }) {
 
       {data.selected_sources?.length > 0 && (
         <SectionCard title="Selected sources">
-          <div>
-            {data.selected_sources.map((source) => (
-              <Pill key={source}>{source}</Pill>
-            ))}
-          </div>
+          {data.selected_sources.map((source) => (
+            <Pill key={source}>{source}</Pill>
+          ))}
         </SectionCard>
       )}
 
@@ -309,22 +230,13 @@ function AnswerCard({ data }: { data: ChatApiResponse }) {
                   padding: "12px",
                 }}
               >
-                <div style={{ fontWeight: 800, color: "#f8fafc" }}>
-                  {ref.resource_name || ref.title || `Chunk ${ref.chunk_id}`}
-                </div>
-                <div
-                  style={{
-                    marginTop: "4px",
-                    fontSize: "13px",
-                    color: "#94a3b8",
-                    lineHeight: 1.5,
-                  }}
-                >
+                <div style={{ fontWeight: 800 }}>{ref.resource_name || ref.title}</div>
+                <div style={{ marginTop: "4px", fontSize: "13px", color: "#94a3b8" }}>
                   {ref.source_type} • {ref.resource_path || "No path"}
                 </div>
                 <div style={{ marginTop: "8px" }}>
                   <Pill>Chunk ID: {ref.chunk_id}</Pill>
-                  <Pill>Score: {ref.score.toFixed(4)}</Pill>
+                  <Pill>Score: {ref.score?.toFixed?.(4) ?? ref.score}</Pill>
                 </div>
               </div>
             ))}
@@ -345,235 +257,356 @@ function StreamingAnswerCard({ text }: { text: string }) {
         borderRadius: "22px",
         padding: "18px",
         color: "#e5e7eb",
-        boxShadow: "0 8px 30px rgba(0,0,0,0.18)",
       }}
     >
-      <div style={{ marginBottom: "10px" }}>
-        <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
-          Streaming response
-        </Pill>
-      </div>
+      <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
+        Streaming response
+      </Pill>
 
-      <div
-        style={{
-          whiteSpace: "pre-wrap",
-          lineHeight: 1.7,
-          fontSize: "15px",
-          color: "#e2e8f0",
-          padding: "14px",
-          borderRadius: "16px",
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.06)",
-        }}
-      >
+      <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.7, marginTop: 12 }}>
         {text || "Thinking… waiting for first token"}
-        <div style={{ marginTop: "10px", fontSize: "12px", color: "#94a3b8" }}>
-          Streaming response in progress
-        </div>
       </div>
     </div>
   );
 }
 
-export default function ChatPage({ userId: propUserId }: { userId?: string } = {}) {
-  const [text, setText] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [selectedUserKey, setSelectedUserKey] = useState("tech-l2");
+export default function ChatPage() {
+  const { user, logout, getAccessTokenSilently, isAuthenticated } = useAuth0();
 
-  const activeUser = useMemo(
-    () => DEMO_USERS.find((u) => u.key === selectedUserKey) || DEMO_USERS[1],
-    [selectedUserKey]
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
+
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+
+  const activeConversation = useMemo(
+    () => conversations.find((c) => c.id === activeConversationId) || null,
+    [conversations, activeConversationId]
   );
 
-  const effectiveUserId = propUserId ?? activeUser.userId;
+  const messages = activeConversation?.messages || [];
 
-  const handleSend = async () => {
-    if (!text.trim() || loading) return;
+  async function getToken() {
+    return getAccessTokenSilently({
+      authorizationParams: {
+        audience: import.meta.env.VITE_AUTH0_AUDIENCE,
+        scope: "openid profile email",
+      },
+    });
+  }
 
-    const userText = text;
-    setText("");
-    setLoading(true);
-    setError("");
-
-    setMessages((prev) => [
-      ...prev,
-      { type: "user", text: userText },
-      { type: "streaming", text: "" },
-    ]);
-
+  async function persistConversation(conversation: Conversation) {
     try {
-      await streamChat(effectiveUserId, userText, {
-  // onToken: (token) => {
-  //   setMessages((prev) => {
-  //     const copy = [...prev];
-  //     const last = copy[copy.length - 1];
-  //     if (last?.type === "streaming") {
-  //       last.text = (last.text || "") + token;
-  //     }
-  //     return copy;
-  //   });
-  // },
-  onToken: (token) => {
-  setMessages((prev) => {
-    if (prev.length === 0) return prev;
+      const token = await getToken();
+      await updateChatSession(token, conversation);
+    } catch (err) {
+      console.error("Failed to save chat session", err);
+    }
+  }
 
-    const copy = [...prev];
-    const last = copy[copy.length - 1];
+  function scheduleSave(conversation: Conversation) {
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+    }
 
-    if (last?.type !== "streaming") return prev;
+    saveTimerRef.current = window.setTimeout(() => {
+      persistConversation(conversation);
+    }, 500);
+  }
 
-    copy[copy.length - 1] = {
-      ...last,
-      text: (last.text || "") + token,
+  useEffect(() => {
+    localStorage.removeItem("datatrust_conversations");
+    localStorage.removeItem("datatrust_active_conversation");
+  }, []);
+
+  useEffect(() => {
+    async function loadHistory() {
+      if (!isAuthenticated) return;
+
+      setHistoryLoading(true);
+      setError("");
+
+      try {
+        const token = await getToken();
+        const sessions = await getChatHistory(token);
+
+        setConversations(sessions);
+
+        if (sessions.length > 0) {
+          setActiveConversationId(sessions[0].id);
+        } else {
+          setActiveConversationId(null);
+        }
+      } catch (err: any) {
+        setError(err?.message || "Failed to load chat history");
+      } finally {
+        setHistoryLoading(false);
+      }
+    }
+
+    loadHistory();
+  }, [isAuthenticated, user?.sub]);
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+
+      if (saveTimerRef.current) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+    };
+  }, []);
+
+  async function createNewChat() {
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+
+    const newConversation: Conversation = {
+      id,
+      title: "New chat",
+      messages: [],
+      createdAt: now,
+      updatedAt: now,
     };
 
-    return copy;
-  });
-  },
-  onDone: (finalPayload) => {
-    setMessages((prev) => {
+    setConversations((prev) => [newConversation, ...prev]);
+    setActiveConversationId(id);
+    setError("");
+
+    try {
+      const token = await getToken();
+      await saveChatSession(token, newConversation);
+    } catch (err) {
+      console.error("Failed to create chat session", err);
+    }
+  }
+
+  function updateActiveMessages(updater: (prev: ChatMessage[]) => ChatMessage[]) {
+    setConversations((prev) => {
+      let activeId = activeConversationId;
+      let working = [...prev];
+
+      if (!activeId || !working.some((c) => c.id === activeId)) {
+        activeId = crypto.randomUUID();
+        setActiveConversationId(activeId);
+
+        const now = new Date().toISOString();
+        working = [
+          {
+            id: activeId,
+            title: "New chat",
+            messages: [],
+            createdAt: now,
+            updatedAt: now,
+          },
+          ...working,
+        ];
+      }
+
+      let conversationToSave: Conversation | null = null;
+
+      const next = working.map((conv) => {
+        if (conv.id !== activeId) return conv;
+
+        const nextMessages = updater(conv.messages);
+        const firstUser = nextMessages.find((m) => m.type === "user") as
+          | { type: "user"; text: string }
+          | undefined;
+
+        const updated: Conversation = {
+          ...conv,
+          title:
+            conv.title === "New chat" && firstUser?.text
+              ? firstUser.text.slice(0, 42)
+              : conv.title,
+          messages: nextMessages,
+          updatedAt: new Date().toISOString(),
+        };
+
+        conversationToSave = updated;
+        return updated;
+      });
+
+      if (conversationToSave) {
+        scheduleSave(conversationToSave);
+      }
+
+      return next;
+    });
+  }
+
+  async function deleteConversation(id: string) {
+    setConversations((prev) => prev.filter((c) => c.id !== id));
+
+    if (id === activeConversationId) {
+      setActiveConversationId(null);
+    }
+
+    try {
+      const token = await getToken();
+      await deleteChatSession(token, id);
+    } catch (err) {
+      console.error("Failed to delete chat session", err);
+    }
+  }
+
+  function stopRequest() {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setLoading(false);
+
+    updateActiveMessages((prev) => {
       const copy = [...prev];
       const last = copy[copy.length - 1];
 
-      if (!last || last.type !== "streaming") {
-        return copy;
-      }
-
-      copy.pop();
-
-      if (finalPayload?.status === "blocked") {
-        copy.push({ type: "blocked", data: finalPayload });
-      } else if (finalPayload) {
-        copy.push({ type: "answer", data: finalPayload });
-      } else {
+      if (last?.type === "streaming") {
+        copy.pop();
         copy.push({
           type: "system",
-          text: "Streaming completed but no final payload was returned.",
+          text: "Request stopped.",
         });
       }
 
       return copy;
     });
-    setLoading(false);
-  },
-  onBlocked: (blockedPayload) => {
-    setMessages((prev) => {
-      const copy = [...prev];
-      const last = copy[copy.length - 1];
-      if (last?.type === "streaming") {
-        copy.pop();
-      }
-      copy.push({ type: "blocked", data: blockedPayload });
-      return copy;
-    });
-    setLoading(false);
-  },
-  onError: (message) => {
-    setMessages((prev) => {
-      const copy = [...prev];
-      const last = copy[copy.length - 1];
+  }
 
-      if (last?.type === "streaming") {
-        copy.pop();
-      }
+  async function handleSend() {
+    if (!text.trim()) return;
 
-      copy.push({
-        type: "system",
-        text: `Error: ${message}`,
-      });
+    if (loading) {
+      stopRequest();
+      return;
+    }
 
-      return copy;
-    });
-    setError(message);
-    setLoading(false);
-  },
-});
-      // await streamChat(activeUser.userId, userText, {
-      //   onToken: (token) => {
-      //     setMessages((prev) => {
-      //       const copy = [...prev];
-      //       const last = copy[copy.length - 1];
-      //       if (last?.type === "streaming") {
-      //         last.text = (last.text || "") + token;
-      //       }
-      //       return copy;
-      //     });
-      //   },
-      //   onDone: (finalPayload) => {
-      //     setMessages((prev) => {
-      //       const copy = [...prev];
-      //       const last = copy[copy.length - 1];
+    const userText = text.trim();
+    setText("");
+    setLoading(true);
+    setError("");
 
-      //       if (!last || last.type !== "streaming") {
-      //         return copy;
-      //       }
+    updateActiveMessages((prev) => [
+      ...prev,
+      { type: "user", text: userText },
+      { type: "streaming", text: "" },
+    ]);
 
-      //       copy.pop();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
-      //       if (finalPayload?.status === "blocked") {
-      //         copy.push({ type: "blocked", data: finalPayload });
-      //       } else if (finalPayload) {
-      //         copy.push({ type: "answer", data: finalPayload });
-      //       } else {
-      //         copy.push({
-      //           type: "system",
-      //           text: "Streaming completed but no final payload was returned.",
-      //         });
-      //       }
+    try {
+      const token = await getToken();
 
-      //       return copy;
-      //     });
-      //     setLoading(false);
-      //   },
-      //   onError: (message) => {
-      //     setMessages((prev) => {
-      //       const copy = [...prev];
-      //       const last = copy[copy.length - 1];
+      await streamChatWithToken(
+        token,
+        userText,
+        {
+          onToken: (tokenChunk) => {
+            updateActiveMessages((prev) => {
+              const copy = [...prev];
+              const last = copy[copy.length - 1];
 
-      //       if (last?.type === "streaming") {
-      //         copy.pop();
-      //       }
+              if (last?.type !== "streaming") return prev;
 
-      //       copy.push({
-      //         type: "system",
-      //         text: `Error: ${message}`,
-      //       });
+              copy[copy.length - 1] = {
+                ...last,
+                text: (last.text || "") + tokenChunk,
+              };
 
-      //       return copy;
-      //     });
-      //     setError(message);
-      //     setLoading(false);
-      //   },
-      // });
+              return copy;
+            });
+          },
+
+          onDone: (finalPayload) => {
+            updateActiveMessages((prev) => {
+              const copy = [...prev];
+              const last = copy[copy.length - 1];
+
+              if (last?.type === "streaming") copy.pop();
+
+              if (finalPayload?.status === "blocked") {
+                copy.push({ type: "blocked", data: finalPayload });
+              } else if (finalPayload) {
+                copy.push({ type: "answer", data: finalPayload });
+              } else {
+                copy.push({
+                  type: "system",
+                  text: "Streaming completed but no final payload was returned.",
+                });
+              }
+
+              return copy;
+            });
+          },
+
+          onBlocked: (blockedPayload) => {
+            const data = blockedPayload?.detail ?? blockedPayload;
+
+            updateActiveMessages((prev) => {
+              const copy = [...prev];
+              const last = copy[copy.length - 1];
+
+              if (last?.type === "streaming") copy.pop();
+
+              copy.push({ type: "blocked", data });
+              return copy;
+            });
+          },
+
+          onError: (message) => {
+            if (controller.signal.aborted) return;
+
+            updateActiveMessages((prev) => {
+              const copy = [...prev];
+              const last = copy[copy.length - 1];
+
+              if (last?.type === "streaming") copy.pop();
+
+              copy.push({
+                type: "system",
+                text: `Error: ${message}`,
+              });
+
+              return copy;
+            });
+
+            setError(message);
+          },
+        },
+        controller.signal
+      );
     } catch (err: any) {
-      console.error(err);
-      setMessages((prev) => {
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      const message =
+        err?.name === "AbortError"
+          ? "Request stopped."
+          : err?.message === "AUTH_REQUIRED"
+          ? "Your session expired. Please sign in again."
+          : err?.message || "Request failed";
+
+      updateActiveMessages((prev) => {
         const copy = [...prev];
         const last = copy[copy.length - 1];
-        if (last?.type === "streaming") {
-          copy.pop();
-        }
 
-        if (err.message === "AUTH_REQUIRED") {
-          copy.push({
-            type: "system",
-            text: "Your session expired. Please sign in again.",
-          });
-        } else {
-          copy.push({
-            type: "system",
-            text: err.message || "Request failed",
-          });
-        }
+        if (last?.type === "streaming") copy.pop();
 
+        copy.push({ type: "system", text: message });
         return copy;
       });
-      setError(err.message || "Request failed");
+
+      setError(message);
+    } finally {
+      abortControllerRef.current = null;
       setLoading(false);
     }
-  };
+  }
 
   return (
     <div
@@ -587,94 +620,94 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
     >
       <aside
         style={{
-          width: "300px",
+          width: "310px",
           borderRight: "1px solid #1e293b",
           padding: "22px",
           background: "rgba(2, 6, 23, 0.88)",
           backdropFilter: "blur(14px)",
+          overflowY: "auto",
         }}
       >
         <div style={{ marginBottom: "20px" }}>
-          <div
-            style={{
-              fontSize: "22px",
-              fontWeight: 900,
-              letterSpacing: "-0.02em",
-              color: "#f8fafc",
-            }}
-          >
-            DataTrust
-          </div>
+          <div style={{ fontSize: "22px", fontWeight: 900 }}>DataTrust</div>
           <div style={{ marginTop: "6px", fontSize: "13px", color: "#94a3b8" }}>
             Private, policy-aware AI assistant
           </div>
         </div>
 
-        <SidebarButton
-          onClick={() => {
-            setMessages([]);
-            setError("");
+        <button
+          onClick={createNewChat}
+          style={{
+            width: "100%",
+            padding: "12px 14px",
+            borderRadius: "14px",
+            border: "1px solid #253245",
+            background: "linear-gradient(180deg, #111827 0%, #0b1220 100%)",
+            color: "#f8fafc",
+            cursor: "pointer",
+            fontWeight: 700,
           }}
         >
           + New Chat
-        </SidebarButton>
+        </button>
 
-        <div
-          style={{
-            marginTop: "18px",
-            padding: "14px",
-            borderRadius: "16px",
-            border: "1px solid #223046",
-            background: "#0b1220",
-          }}
-        >
-          <div
-            style={{
-              marginBottom: "10px",
-              fontSize: "13px",
-              fontWeight: 800,
-              color: "#cbd5e1",
-            }}
-          >
-            Demo user
-          </div>
+        <div style={{ marginTop: 18 }}>
+          {historyLoading && (
+            <div style={{ color: "#94a3b8", fontSize: 13 }}>Loading history...</div>
+          )}
 
-          <select
-            value={selectedUserKey}
-            onChange={(e) => {
-              setSelectedUserKey(e.target.value);
-              setMessages([]);
-              setError("");
-            }}
-            style={{
-              width: "100%",
-              padding: "12px",
-              borderRadius: "12px",
-              border: "1px solid #334155",
-              background: "#111827",
-              color: "#f8fafc",
-              outline: "none",
-              fontSize: "14px",
-            }}
-          >
-            {DEMO_USERS.map((user) => (
-              <option key={user.key} value={user.key}>
-                {user.label}
-              </option>
-            ))}
-          </select>
+          {conversations.map((conv) => (
+            <div
+              key={conv.id}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 8,
+              }}
+            >
+              <button
+                onClick={() => setActiveConversationId(conv.id)}
+                style={{
+                  flex: 1,
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  borderRadius: 12,
+                  border:
+                    conv.id === activeConversationId
+                      ? "1px solid #3b82f6"
+                      : "1px solid #1e293b",
+                  background:
+                    conv.id === activeConversationId ? "#10203a" : "#0b1220",
+                  color: "white",
+                  cursor: "pointer",
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 13 }}>{conv.title}</div>
+                <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
+                  {new Date(conv.updatedAt).toLocaleString()}
+                </div>
+              </button>
 
-          <div style={{ marginTop: "12px" }}>
-            <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
-              {activeUser.department}
-            </Pill>
-            <Pill background="#1a2e1f" color="#bbf7d0" border="#166534">
-              {activeUser.level}
-            </Pill>
-          </div>
+              <button
+                onClick={() => deleteConversation(conv.id)}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  border: "1px solid #3f1d1d",
+                  background: "#1f0d12",
+                  color: "#fca5a5",
+                  cursor: "pointer",
+                }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
         </div>
 
-        <div style={{ marginTop: "20px", color: "#94a3b8", fontSize: "13px" }}>
+        <div style={{ marginTop: "22px", color: "#94a3b8", fontSize: "13px" }}>
           Suggested prompts:
           <div style={{ marginTop: "10px", display: "grid", gap: "8px", lineHeight: 1.5 }}>
             <div>• Summarize backend deployment architecture docs</div>
@@ -690,7 +723,6 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
             padding: "18px 24px",
             borderBottom: "1px solid #1e293b",
             background: "rgba(4, 17, 43, 0.75)",
-            backdropFilter: "blur(12px)",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -701,17 +733,57 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
               Secure Internal Assistant
             </div>
             <div style={{ marginTop: "4px", fontSize: "13px", color: "#94a3b8" }}>
-              Department-aware and level-aware retrieval
+              Authenticated with Auth0. Authorization enforced by DataTrust backend.
             </div>
           </div>
 
-          <div>
-            <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
-              Department: {activeUser.department}
-            </Pill>
-            <Pill background="#1a2e1f" color="#bbf7d0" border="#166534">
-              Level: {activeUser.level}
-            </Pill>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {user && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "6px 12px",
+                  borderRadius: "999px",
+                  border: "1px solid #334155",
+                  background: "#0f172a",
+                  fontSize: "13px",
+                  color: "#94a3b8",
+                }}
+              >
+                {user.picture && (
+                  <img
+                    src={user.picture}
+                    alt="avatar"
+                    style={{ width: 22, height: 22, borderRadius: "50%" }}
+                  />
+                )}
+                <span>{user.name || user.email}</span>
+              </div>
+            )}
+
+            <button
+              onClick={() =>
+                logout({
+                  logoutParams: {
+                    returnTo: window.location.origin + "/login",
+                  },
+                })
+              }
+              style={{
+                padding: "8px 16px",
+                borderRadius: "10px",
+                border: "1px solid #7f1d1d",
+                background: "#3f1d1d",
+                color: "#fca5a5",
+                fontSize: "13px",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Sign Out
+            </button>
           </div>
         </div>
 
@@ -725,17 +797,10 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
                 color: "#cbd5e1",
               }}
             >
-              <div
-                style={{
-                  fontSize: "34px",
-                  fontWeight: 900,
-                  color: "#f8fafc",
-                  marginBottom: "10px",
-                }}
-              >
+              <div style={{ fontSize: "34px", fontWeight: 900, color: "#f8fafc" }}>
                 Ask your internal assistant
               </div>
-              <div style={{ fontSize: "15px", lineHeight: 1.7, color: "#94a3b8" }}>
+              <div style={{ marginTop: 10, fontSize: "15px", lineHeight: 1.7, color: "#94a3b8" }}>
                 DataTrust evaluates policy, checks department and level access,
                 retrieves only approved internal content, and generates a guarded answer.
               </div>
@@ -754,7 +819,6 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
                     background:
                       "linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #1e40af 100%)",
                     color: "white",
-                    boxShadow: "0 8px 30px rgba(37,99,235,0.28)",
                   }}
                 >
                   {message.text}
@@ -809,7 +873,6 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
             padding: "18px 24px",
             borderTop: "1px solid #1e293b",
             background: "rgba(4, 17, 43, 0.75)",
-            backdropFilter: "blur(12px)",
           }}
         >
           <div
@@ -824,6 +887,12 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
               rows={3}
               style={{
                 flex: 1,
@@ -835,29 +904,27 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
                 resize: "none",
                 fontSize: "14px",
                 lineHeight: 1.5,
-                boxShadow: "inset 0 1px 2px rgba(0,0,0,0.05)",
               }}
               placeholder="Ask about internal docs, repos, runbooks, or architecture..."
             />
+
             <button
-              onClick={handleSend}
-              disabled={loading}
+              onClick={loading ? stopRequest : handleSend}
               style={{
                 minWidth: "120px",
                 height: "52px",
                 borderRadius: "16px",
-                border: "1px solid #1d4ed8",
+                border: loading ? "1px solid #7f1d1d" : "1px solid #1d4ed8",
                 background: loading
-                  ? "#475569"
+                  ? "linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%)"
                   : "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
                 color: "white",
-                cursor: loading ? "not-allowed" : "pointer",
+                cursor: "pointer",
                 fontWeight: 800,
                 fontSize: "14px",
-                boxShadow: loading ? "none" : "0 8px 24px rgba(37,99,235,0.25)",
               }}
             >
-              {loading ? "Loading..." : "Send"}
+              {loading ? "Stop" : "Send"}
             </button>
           </div>
         </div>
@@ -865,8 +932,9 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
     </div>
   );
 }
-// import { useMemo, useState } from "react";
-// import { sendChat } from "../services/api";
+// import { useEffect, useMemo, useRef, useState } from "react";
+// import { useAuth0 } from "@auth0/auth0-react";
+// import { streamChatWithToken } from "../services/api";
 
 // type ChatApiResponse = {
 //   status: string;
@@ -902,53 +970,19 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //   | { type: "user"; text: string }
 //   | { type: "blocked"; data: ChatApiResponse }
 //   | { type: "answer"; data: ChatApiResponse }
+//   | { type: "streaming"; text: string }
 //   | { type: "system"; text: string };
 
-// type DemoUser = {
-//   key: string;
-//   label: string;
-//   userId: string;
-//   department: string;
-//   level: string;
+// type Conversation = {
+//   id: string;
+//   title: string;
+//   messages: ChatMessage[];
+//   createdAt: string;
+//   updatedAt: string;
 // };
 
-// const DEMO_USERS: DemoUser[] = [
-//   {
-//     key: "tech-l1",
-//     label: "Tech L1",
-//     userId: "a9285829-1226-494c-ab8e-82fd49af258f",
-//     department: "TECH",
-//     level: "L1",
-//   },
-//   {
-//     key: "tech-l2",
-//     label: "Tech L2",
-//     userId: "c68c63d4-707c-4e82-896e-dd5fc2704371",
-//     department: "TECH",
-//     level: "L2",
-//   },
-//   {
-//     key: "tech-l3",
-//     label: "Tech L3",
-//     userId: "a9f4626e-391e-48b9-9134-8f95863d4601",
-//     department: "TECH",
-//     level: "L3",
-//   },
-//   {
-//     key: "hr-l1",
-//     label: "HR L1",
-//     userId: "1edab7be-5f84-4334-aedb-6046eafb7263",
-//     department: "HR",
-//     level: "L1",
-//   },
-//   {
-//     key: "hr-l3",
-//     label: "HR L3",
-//     userId: "2e857853-a2a9-4334-be36-4861e6aba2cc",
-//     department: "HR",
-//     level: "L3",
-//   },
-// ];
+// const STORAGE_KEY = "datatrust_conversations";
+// const ACTIVE_KEY = "datatrust_active_conversation";
 
 // function Pill({
 //   children,
@@ -982,13 +1016,7 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //   );
 // }
 
-// function SectionCard({
-//   title,
-//   children,
-// }: {
-//   title: string;
-//   children: React.ReactNode;
-// }) {
+// function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
 //   return (
 //     <div
 //       style={{
@@ -1005,39 +1033,12 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //           fontWeight: 800,
 //           color: "#cbd5e1",
 //           marginBottom: "10px",
-//           letterSpacing: "0.02em",
 //         }}
 //       >
 //         {title}
 //       </div>
 //       {children}
 //     </div>
-//   );
-// }
-
-// function SidebarButton({
-//   children,
-//   onClick,
-// }: {
-//   children: React.ReactNode;
-//   onClick: () => void;
-// }) {
-//   return (
-//     <button
-//       onClick={onClick}
-//       style={{
-//         width: "100%",
-//         padding: "12px 14px",
-//         borderRadius: "14px",
-//         border: "1px solid #253245",
-//         background: "linear-gradient(180deg, #111827 0%, #0b1220 100%)",
-//         color: "#f8fafc",
-//         cursor: "pointer",
-//         fontWeight: 700,
-//       }}
-//     >
-//       {children}
-//     </button>
 //   );
 // }
 
@@ -1051,26 +1052,23 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //         borderRadius: "22px",
 //         padding: "18px",
 //         color: "#fee2e2",
-//         boxShadow: "0 8px 30px rgba(0,0,0,0.2)",
 //       }}
 //     >
 //       <div style={{ fontSize: "16px", fontWeight: 900, marginBottom: "12px" }}>
 //         Request blocked by policy
 //       </div>
 
-//       <div style={{ marginBottom: "12px" }}>
-//         <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
-//           Decision: {data.policy.decision}
-//         </Pill>
-//         <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
-//           Category: {data.policy.reason_category || "RESTRICTED_REQUEST"}
-//         </Pill>
-//         <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
-//           Risk: {data.policy.risk_level} ({data.policy.risk_score})
-//         </Pill>
-//       </div>
+//       <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
+//         Decision: {data.policy.decision}
+//       </Pill>
+//       <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
+//         Category: {data.policy.reason_category || "RESTRICTED_REQUEST"}
+//       </Pill>
+//       <Pill background="#3f1d1d" color="#fecaca" border="#7f1d1d">
+//         Risk: {data.policy.risk_level} ({data.policy.risk_score})
+//       </Pill>
 
-//       <div style={{ color: "#ffe4e6", lineHeight: 1.65 }}>
+//       <div style={{ marginTop: 12, lineHeight: 1.65 }}>
 //         {data.policy.user_safe_explanation || "This request is restricted by policy."}
 //       </div>
 
@@ -1081,8 +1079,6 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //             padding: "12px",
 //             borderRadius: "14px",
 //             background: "rgba(255,255,255,0.04)",
-//             border: "1px solid rgba(255,255,255,0.08)",
-//             color: "#fecdd3",
 //           }}
 //         >
 //           <strong>Try instead:</strong> {data.policy.suggested_safe_alternative}
@@ -1091,18 +1087,11 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 
 //       {data.policy.matched_rules?.length > 0 && (
 //         <SectionCard title="Matched policy rules">
-//           <div>
-//             {data.policy.matched_rules.map((rule) => (
-//               <Pill
-//                 key={rule}
-//                 background="#3f1d1d"
-//                 color="#fecaca"
-//                 border="#7f1d1d"
-//               >
-//                 {rule}
-//               </Pill>
-//             ))}
-//           </div>
+//           {data.policy.matched_rules.map((rule) => (
+//             <Pill key={rule} background="#3f1d1d" color="#fecaca" border="#7f1d1d">
+//               {rule}
+//             </Pill>
+//           ))}
 //         </SectionCard>
 //       )}
 //     </div>
@@ -1119,10 +1108,9 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //         borderRadius: "22px",
 //         padding: "18px",
 //         color: "#e5e7eb",
-//         boxShadow: "0 8px 30px rgba(0,0,0,0.18)",
 //       }}
 //     >
-//       <div style={{ marginBottom: "10px" }}>
+//       <div>
 //         <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
 //           Decision: {data.policy.decision}
 //         </Pill>
@@ -1154,11 +1142,9 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 
 //       {data.selected_sources?.length > 0 && (
 //         <SectionCard title="Selected sources">
-//           <div>
-//             {data.selected_sources.map((source) => (
-//               <Pill key={source}>{source}</Pill>
-//             ))}
-//           </div>
+//           {data.selected_sources.map((source) => (
+//             <Pill key={source}>{source}</Pill>
+//           ))}
 //         </SectionCard>
 //       )}
 
@@ -1175,22 +1161,13 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //                   padding: "12px",
 //                 }}
 //               >
-//                 <div style={{ fontWeight: 800, color: "#f8fafc" }}>
-//                   {ref.resource_name || ref.title || `Chunk ${ref.chunk_id}`}
-//                 </div>
-//                 <div
-//                   style={{
-//                     marginTop: "4px",
-//                     fontSize: "13px",
-//                     color: "#94a3b8",
-//                     lineHeight: 1.5,
-//                   }}
-//                 >
+//                 <div style={{ fontWeight: 800 }}>{ref.resource_name || ref.title}</div>
+//                 <div style={{ marginTop: "4px", fontSize: "13px", color: "#94a3b8" }}>
 //                   {ref.source_type} • {ref.resource_path || "No path"}
 //                 </div>
 //                 <div style={{ marginTop: "8px" }}>
 //                   <Pill>Chunk ID: {ref.chunk_id}</Pill>
-//                   <Pill>Score: {ref.score.toFixed(4)}</Pill>
+//                   <Pill>Score: {ref.score?.toFixed?.(4) ?? ref.score}</Pill>
 //                 </div>
 //               </div>
 //             ))}
@@ -1201,54 +1178,279 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //   );
 // }
 
+// function StreamingAnswerCard({ text }: { text: string }) {
+//   return (
+//     <div
+//       style={{
+//         maxWidth: "920px",
+//         background: "linear-gradient(180deg, #0f172a 0%, #0b1325 100%)",
+//         border: "1px solid #243041",
+//         borderRadius: "22px",
+//         padding: "18px",
+//         color: "#e5e7eb",
+//       }}
+//     >
+//       <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
+//         Streaming response
+//       </Pill>
+
+//       <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.7, marginTop: 12 }}>
+//         {text || "Thinking… waiting for first token"}
+//       </div>
+//     </div>
+//   );
+// }
+
 // export default function ChatPage() {
+//   const { user, logout, getAccessTokenSilently } = useAuth0();
+
 //   const [text, setText] = useState("");
-//   const [messages, setMessages] = useState<ChatMessage[]>([]);
 //   const [loading, setLoading] = useState(false);
 //   const [error, setError] = useState("");
-//   const [selectedUserKey, setSelectedUserKey] = useState("tech-l2");
 
-//   const activeUser = useMemo(
-//     () => DEMO_USERS.find((u) => u.key === selectedUserKey) || DEMO_USERS[1],
-//     [selectedUserKey]
+//   const abortControllerRef = useRef<AbortController | null>(null);
+
+//   const [conversations, setConversations] = useState<Conversation[]>(() => {
+//     try {
+//       const saved = localStorage.getItem(STORAGE_KEY);
+//       return saved ? JSON.parse(saved) : [];
+//     } catch {
+//       return [];
+//     }
+//   });
+
+//   const [activeConversationId, setActiveConversationId] = useState<string | null>(() => {
+//     return localStorage.getItem(ACTIVE_KEY);
+//   });
+
+//   const activeConversation = useMemo(
+//     () => conversations.find((c) => c.id === activeConversationId) || null,
+//     [conversations, activeConversationId]
 //   );
 
-//   const handleSend = async () => {
-//     if (!text.trim()) return;
+//   const messages = activeConversation?.messages || [];
 
-//     const userText = text;
+//   useEffect(() => {
+//     localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+//   }, [conversations]);
+
+//   useEffect(() => {
+//     if (activeConversationId) {
+//       localStorage.setItem(ACTIVE_KEY, activeConversationId);
+//     }
+//   }, [activeConversationId]);
+
+//   function createNewChat() {
+//     const id = crypto.randomUUID();
+//     const now = new Date().toISOString();
+
+//     const newConversation: Conversation = {
+//       id,
+//       title: "New chat",
+//       messages: [],
+//       createdAt: now,
+//       updatedAt: now,
+//     };
+
+//     setConversations((prev) => [newConversation, ...prev]);
+//     setActiveConversationId(id);
+//     setError("");
+//   }
+
+//   function updateActiveMessages(updater: (prev: ChatMessage[]) => ChatMessage[]) {
+//     setConversations((prev) => {
+//       let activeId = activeConversationId;
+
+//       if (!activeId || !prev.some((c) => c.id === activeId)) {
+//         activeId = crypto.randomUUID();
+//         setActiveConversationId(activeId);
+
+//         const now = new Date().toISOString();
+//         prev = [
+//           {
+//             id: activeId,
+//             title: "New chat",
+//             messages: [],
+//             createdAt: now,
+//             updatedAt: now,
+//           },
+//           ...prev,
+//         ];
+//       }
+
+//       return prev.map((conv) => {
+//         if (conv.id !== activeId) return conv;
+
+//         const nextMessages = updater(conv.messages);
+//         const firstUser = nextMessages.find((m) => m.type === "user") as
+//           | { type: "user"; text: string }
+//           | undefined;
+
+//         return {
+//           ...conv,
+//           title:
+//             conv.title === "New chat" && firstUser?.text
+//               ? firstUser.text.slice(0, 42)
+//               : conv.title,
+//           messages: nextMessages,
+//           updatedAt: new Date().toISOString(),
+//         };
+//       });
+//     });
+//   }
+
+//   function deleteConversation(id: string) {
+//     setConversations((prev) => prev.filter((c) => c.id !== id));
+
+//     if (id === activeConversationId) {
+//       setActiveConversationId(null);
+//       localStorage.removeItem(ACTIVE_KEY);
+//     }
+//   }
+
+//   function stopRequest() {
+//   abortControllerRef.current?.abort();
+//   abortControllerRef.current = null;
+//   setLoading(false);
+
+//   updateActiveMessages((prev) => {
+//     const copy = [...prev];
+//     const last = copy[copy.length - 1];
+
+//     if (last?.type === "streaming") {
+//       copy.pop();
+//       copy.push({
+//         type: "system",
+//         text: "Request stopped.",
+//       });
+//     }
+
+//     return copy;
+//   });
+// }
+
+//   async function handleSend() {
+//     if (!text.trim() || loading) return;
+
+//     const userText = text.trim();
 //     setText("");
 //     setLoading(true);
 //     setError("");
 
-//     setMessages((prev) => [...prev, { type: "user", text: userText }]);
+//     updateActiveMessages((prev) => [
+//       ...prev,
+//       { type: "user", text: userText },
+//       { type: "streaming", text: "" },
+//     ]);
 
 //     try {
-//       const result = await sendChat(activeUser.userId, userText);
+      
+//       const token = await getAccessTokenSilently({
+//         authorizationParams: {
+//         audience: import.meta.env.VITE_AUTH0_AUDIENCE,
+//         scope: "openid profile email",
+//         },
+//       });
 
-//       if (result.blocked) {
-//         setMessages((prev) => [...prev, { type: "blocked", data: result.data }]);
-//       } else {
-//         setMessages((prev) => [...prev, { type: "answer", data: result.data }]);
-//       }
+//       const controller = new AbortController();
+//       abortControllerRef.current = controller;
+
+//       await streamChatWithToken(token, userText, {
+//         onToken: (tokenChunk) => {
+//           updateActiveMessages((prev) => {
+//             const copy = [...prev];
+//             const last = copy[copy.length - 1];
+
+//             if (last?.type !== "streaming") return prev;
+
+//             copy[copy.length - 1] = {
+//               ...last,
+//               text: (last.text || "") + tokenChunk,
+//             };
+
+//             return copy;
+//           });
+//         },
+
+//         onDone: (finalPayload) => {
+//           updateActiveMessages((prev) => {
+//             const copy = [...prev];
+//             const last = copy[copy.length - 1];
+
+//             if (last?.type === "streaming") copy.pop();
+
+//             if (finalPayload?.status === "blocked") {
+//               copy.push({ type: "blocked", data: finalPayload });
+//             } else if (finalPayload) {
+//               copy.push({ type: "answer", data: finalPayload });
+//             } else {
+//               copy.push({
+//                 type: "system",
+//                 text: "Streaming completed but no final payload was returned.",
+//               });
+//             }
+
+//             return copy;
+//           });
+
+//           setLoading(false);
+//         },
+
+//         onBlocked: (blockedPayload) => {
+//           const data = blockedPayload?.detail ?? blockedPayload;
+
+//           updateActiveMessages((prev) => {
+//             const copy = [...prev];
+//             const last = copy[copy.length - 1];
+
+//             if (last?.type === "streaming") copy.pop();
+
+//             copy.push({ type: "blocked", data });
+//             return copy;
+//           });
+
+//           setLoading(false);
+//         },
+
+//         onError: (message) => {
+//           updateActiveMessages((prev) => {
+//             const copy = [...prev];
+//             const last = copy[copy.length - 1];
+
+//             if (last?.type === "streaming") copy.pop();
+
+//             copy.push({
+//               type: "system",
+//               text: `Error: ${message}`,
+//             });
+
+//             return copy;
+//           });
+
+//           setError(message);
+//           setLoading(false);
+//         },
+//       });
 //     } catch (err: any) {
-//       console.error(err);
+//       const message =
+//         err?.message === "AUTH_REQUIRED"
+//           ? "Your session expired. Please sign in again."
+//           : err?.message || "Request failed";
 
-//       if (err.message === "AUTH_REQUIRED") {
-//         setMessages((prev) => [
-//           ...prev,
-//           {
-//             type: "system",
-//             text: "Your session expired. Please sign in again.",
-//           },
-//         ]);
-//       } else {
-//         setError(err.message || "Request failed");
-//       }
-//     } finally {
+//       updateActiveMessages((prev) => {
+//         const copy = [...prev];
+//         const last = copy[copy.length - 1];
+
+//         if (last?.type === "streaming") copy.pop();
+
+//         copy.push({ type: "system", text: message });
+//         return copy;
+//       });
+
+//       setError(message);
 //       setLoading(false);
 //     }
-//   };
+//   }
 
 //   return (
 //     <div
@@ -1262,94 +1464,90 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //     >
 //       <aside
 //         style={{
-//           width: "300px",
+//           width: "310px",
 //           borderRight: "1px solid #1e293b",
 //           padding: "22px",
 //           background: "rgba(2, 6, 23, 0.88)",
 //           backdropFilter: "blur(14px)",
+//           overflowY: "auto",
 //         }}
 //       >
 //         <div style={{ marginBottom: "20px" }}>
-//           <div
-//             style={{
-//               fontSize: "22px",
-//               fontWeight: 900,
-//               letterSpacing: "-0.02em",
-//               color: "#f8fafc",
-//             }}
-//           >
-//             DataTrust
-//           </div>
+//           <div style={{ fontSize: "22px", fontWeight: 900 }}>DataTrust</div>
 //           <div style={{ marginTop: "6px", fontSize: "13px", color: "#94a3b8" }}>
 //             Private, policy-aware AI assistant
 //           </div>
 //         </div>
 
-//         <SidebarButton
-//           onClick={() => {
-//             setMessages([]);
-//             setError("");
+//         <button
+//           onClick={createNewChat}
+//           style={{
+//             width: "100%",
+//             padding: "12px 14px",
+//             borderRadius: "14px",
+//             border: "1px solid #253245",
+//             background: "linear-gradient(180deg, #111827 0%, #0b1220 100%)",
+//             color: "#f8fafc",
+//             cursor: "pointer",
+//             fontWeight: 700,
 //           }}
 //         >
 //           + New Chat
-//         </SidebarButton>
+//         </button>
 
-//         <div
-//           style={{
-//             marginTop: "18px",
-//             padding: "14px",
-//             borderRadius: "16px",
-//             border: "1px solid #223046",
-//             background: "#0b1220",
-//           }}
-//         >
-//           <div
-//             style={{
-//               marginBottom: "10px",
-//               fontSize: "13px",
-//               fontWeight: 800,
-//               color: "#cbd5e1",
-//             }}
-//           >
-//             Demo user
-//           </div>
+//         <div style={{ marginTop: 18 }}>
+//           {conversations.map((conv) => (
+//             <div
+//               key={conv.id}
+//               style={{
+//                 display: "flex",
+//                 alignItems: "center",
+//                 gap: 8,
+//                 marginBottom: 8,
+//               }}
+//             >
+//               <button
+//                 onClick={() => setActiveConversationId(conv.id)}
+//                 style={{
+//                   flex: 1,
+//                   textAlign: "left",
+//                   padding: "10px 12px",
+//                   borderRadius: 12,
+//                   border:
+//                     conv.id === activeConversationId
+//                       ? "1px solid #3b82f6"
+//                       : "1px solid #1e293b",
+//                   background:
+//                     conv.id === activeConversationId ? "#10203a" : "#0b1220",
+//                   color: "white",
+//                   cursor: "pointer",
+//                 }}
+//               >
+//                 <div style={{ fontWeight: 700, fontSize: 13 }}>{conv.title}</div>
+//                 <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
+//                   {new Date(conv.updatedAt).toLocaleString()}
+//                 </div>
+//               </button>
 
-//           <select
-//             value={selectedUserKey}
-//             onChange={(e) => {
-//               setSelectedUserKey(e.target.value);
-//               setMessages([]);
-//               setError("");
-//             }}
-//             style={{
-//               width: "100%",
-//               padding: "12px",
-//               borderRadius: "12px",
-//               border: "1px solid #334155",
-//               background: "#111827",
-//               color: "#f8fafc",
-//               outline: "none",
-//               fontSize: "14px",
-//             }}
-//           >
-//             {DEMO_USERS.map((user) => (
-//               <option key={user.key} value={user.key}>
-//                 {user.label}
-//               </option>
-//             ))}
-//           </select>
-
-//           <div style={{ marginTop: "12px" }}>
-//             <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
-//               {activeUser.department}
-//             </Pill>
-//             <Pill background="#1a2e1f" color="#bbf7d0" border="#166534">
-//               {activeUser.level}
-//             </Pill>
-//           </div>
+//               <button
+//                 onClick={() => deleteConversation(conv.id)}
+//                 style={{
+//                   width: 34,
+//                   height: 34,
+//                   borderRadius: 10,
+//                   border: "1px solid #3f1d1d",
+//                   background: "#1f0d12",
+//                   color: "#fca5a5",
+//                   cursor: "pointer",
+//                 }}
+//               >
+//                 ×
+//               </button>
+//             </div>
+//           ))}
 //         </div>
 
-//         <div style={{ marginTop: "20px", color: "#94a3b8", fontSize: "13px" }}>
+//         <div style={{ marginTop: "22px", color: "#94a3b8", fontSize: "13px" }}>
 //           Suggested prompts:
 //           <div style={{ marginTop: "10px", display: "grid", gap: "8px", lineHeight: 1.5 }}>
 //             <div>• Summarize backend deployment architecture docs</div>
@@ -1365,7 +1563,6 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //             padding: "18px 24px",
 //             borderBottom: "1px solid #1e293b",
 //             background: "rgba(4, 17, 43, 0.75)",
-//             backdropFilter: "blur(12px)",
 //             display: "flex",
 //             justifyContent: "space-between",
 //             alignItems: "center",
@@ -1376,17 +1573,57 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //               Secure Internal Assistant
 //             </div>
 //             <div style={{ marginTop: "4px", fontSize: "13px", color: "#94a3b8" }}>
-//               Department-aware and level-aware retrieval
+//               Authenticated with Auth0. Authorization enforced by DataTrust backend.
 //             </div>
 //           </div>
 
-//           <div>
-//             <Pill background="#10203a" color="#bfdbfe" border="#1d4ed8">
-//               Department: {activeUser.department}
-//             </Pill>
-//             <Pill background="#1a2e1f" color="#bbf7d0" border="#166534">
-//               Level: {activeUser.level}
-//             </Pill>
+//           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+//             {user && (
+//               <div
+//                 style={{
+//                   display: "flex",
+//                   alignItems: "center",
+//                   gap: 8,
+//                   padding: "6px 12px",
+//                   borderRadius: "999px",
+//                   border: "1px solid #334155",
+//                   background: "#0f172a",
+//                   fontSize: "13px",
+//                   color: "#94a3b8",
+//                 }}
+//               >
+//                 {user.picture && (
+//                   <img
+//                     src={user.picture}
+//                     alt="avatar"
+//                     style={{ width: 22, height: 22, borderRadius: "50%" }}
+//                   />
+//                 )}
+//                 <span>{user.name || user.email}</span>
+//               </div>
+//             )}
+
+//             <button
+//               onClick={() =>
+//                 logout({
+//                   logoutParams: {
+//                     returnTo: window.location.origin + "/login",
+//                   },
+//                 })
+//               }
+//               style={{
+//                 padding: "8px 16px",
+//                 borderRadius: "10px",
+//                 border: "1px solid #7f1d1d",
+//                 background: "#3f1d1d",
+//                 color: "#fca5a5",
+//                 fontSize: "13px",
+//                 fontWeight: 700,
+//                 cursor: "pointer",
+//               }}
+//             >
+//               Sign Out
+//             </button>
 //           </div>
 //         </div>
 
@@ -1400,17 +1637,10 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //                 color: "#cbd5e1",
 //               }}
 //             >
-//               <div
-//                 style={{
-//                   fontSize: "34px",
-//                   fontWeight: 900,
-//                   color: "#f8fafc",
-//                   marginBottom: "10px",
-//                 }}
-//               >
+//               <div style={{ fontSize: "34px", fontWeight: 900, color: "#f8fafc" }}>
 //                 Ask your internal assistant
 //               </div>
-//               <div style={{ fontSize: "15px", lineHeight: 1.7, color: "#94a3b8" }}>
+//               <div style={{ marginTop: 10, fontSize: "15px", lineHeight: 1.7, color: "#94a3b8" }}>
 //                 DataTrust evaluates policy, checks department and level access,
 //                 retrieves only approved internal content, and generates a guarded answer.
 //               </div>
@@ -1429,7 +1659,6 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //                     background:
 //                       "linear-gradient(135deg, #2563eb 0%, #1d4ed8 50%, #1e40af 100%)",
 //                     color: "white",
-//                     boxShadow: "0 8px 30px rgba(37,99,235,0.28)",
 //                   }}
 //                 >
 //                   {message.text}
@@ -1438,6 +1667,7 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 
 //               {message.type === "blocked" && <BlockedMessageCard data={message.data} />}
 //               {message.type === "answer" && <AnswerCard data={message.data} />}
+//               {message.type === "streaming" && <StreamingAnswerCard text={message.text} />}
 
 //               {message.type === "system" && (
 //                 <div
@@ -1483,7 +1713,6 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //             padding: "18px 24px",
 //             borderTop: "1px solid #1e293b",
 //             background: "rgba(4, 17, 43, 0.75)",
-//             backdropFilter: "blur(12px)",
 //           }}
 //         >
 //           <div
@@ -1498,6 +1727,12 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //             <textarea
 //               value={text}
 //               onChange={(e) => setText(e.target.value)}
+//               onKeyDown={(e) => {
+//                 if (e.key === "Enter" && !e.shiftKey) {
+//                   e.preventDefault();
+//                   handleSend();
+//                 }
+//               }}
 //               rows={3}
 //               style={{
 //                 flex: 1,
@@ -1509,10 +1744,10 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //                 resize: "none",
 //                 fontSize: "14px",
 //                 lineHeight: 1.5,
-//                 boxShadow: "inset 0 1px 2px rgba(0,0,0,0.05)",
 //               }}
 //               placeholder="Ask about internal docs, repos, runbooks, or architecture..."
 //             />
+
 //             <button
 //               onClick={handleSend}
 //               disabled={loading}
@@ -1528,7 +1763,6 @@ export default function ChatPage({ userId: propUserId }: { userId?: string } = {
 //                 cursor: loading ? "not-allowed" : "pointer",
 //                 fontWeight: 800,
 //                 fontSize: "14px",
-//                 boxShadow: loading ? "none" : "0 8px 24px rgba(37,99,235,0.25)",
 //               }}
 //             >
 //               {loading ? "Loading..." : "Send"}

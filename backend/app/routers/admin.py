@@ -107,7 +107,7 @@ def recent_documents(user_id: str = Depends(get_current_user_id)):
             "source_systems(code),departments(code),auth_levels(code)"
         )
         .order("updated_at", desc=True)
-        .limit(20)
+        .limit(10)
         .execute()
         .data
         or []

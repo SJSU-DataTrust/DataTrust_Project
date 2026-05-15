@@ -1,107 +1,73 @@
-import { useState } from "react";
-import { login } from "../services/api";
+import { useAuth0 } from "@auth0/auth0-react";
 
-type Props = {
-  onLogin: (userId: string) => void;
-};
+export default function LoginPage() {
+  const { loginWithRedirect, isLoading } = useAuth0();
 
-export default function LoginPage({ onLogin }: Props) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async () => {
-    if (!email.trim() || !password.trim()) return;
-    setError("");
-    setLoading(true);
-    try {
-      const userId = await login(email.trim(), password);
-      onLogin(userId);
-    } catch (e: any) {
-      setError(e.message || "Login failed");
-    } finally {
-      setLoading(false);
-    }
-  };
+  if (isLoading) return <div>Loading...</div>;
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "#020617",
-        color: "white",
-      }}
-    >
-      <div
-        style={{
-          width: "380px",
-          background: "#0f172a",
-          border: "1px solid #334155",
-          borderRadius: "16px",
-          padding: "24px",
-        }}
-      >
-        <h2 style={{ marginTop: 0 }}>Sign in to DataTrust</h2>
-
-        <div style={{ marginBottom: "12px" }}>
-          <label>Email</label>
-          <input
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "12px",
-              marginTop: "6px",
-              borderRadius: "10px",
-              border: "1px solid #475569",
-            }}
-          />
-        </div>
-
-        <div style={{ marginBottom: "16px" }}>
-          <label>Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "12px",
-              marginTop: "6px",
-              borderRadius: "10px",
-              border: "1px solid #475569",
-            }}
-          />
-        </div>
-
-        {error && (
-          <p style={{ color: "#f87171", marginBottom: "12px", fontSize: "14px" }}>
-            {error}
-          </p>
-        )}
+    <div style={{
+      minHeight: "100vh",
+      background: "radial-gradient(circle at top left, #172554, #020617 40%)",
+      color: "white",
+      display: "grid",
+      placeItems: "center",
+    }}>
+      <div style={{
+        width: 420,
+        padding: 32,
+        borderRadius: 24,
+        background: "#0f172a",
+        border: "1px solid #334155",
+      }}>
+        <h1>DataTrust</h1>
+        <p style={{ color: "#94a3b8" }}>Secure enterprise knowledge access</p>
 
         <button
-          onClick={handleSubmit}
-          disabled={loading}
-          style={{
-            width: "100%",
-            padding: "12px",
-            borderRadius: "10px",
-            border: "1px solid #334155",
-            background: loading ? "#1d4ed8" : "#2563eb",
-            color: "white",
-            fontWeight: 600,
-            cursor: loading ? "not-allowed" : "pointer",
-            opacity: loading ? 0.7 : 1,
-          }}
+          onClick={() => loginWithRedirect()}
+          style={button}
         >
-          {loading ? "Signing in…" : "Sign In"}
+          Continue with Auth0
         </button>
+
+        <button
+          onClick={() =>
+            loginWithRedirect({
+              authorizationParams: { connection: "google-oauth2" },
+            })
+          }
+          style={button}
+        >
+          Continue with Google
+        </button>
+
+        <button
+          onClick={() =>
+            loginWithRedirect({
+              authorizationParams: { connection: "github" },
+            })
+          }
+          style={button}
+        >
+          Continue with GitHub
+        </button>
+
+        <p style={{ color: "#64748b", fontSize: 12 }}>
+          Backend authorization is still enforced by DataTrust policies.
+        </p>
       </div>
     </div>
   );
 }
+
+const button: React.CSSProperties = {
+  width: "100%",
+  padding: "14px",
+  marginTop: 12,
+  borderRadius: 14,
+  border: "1px solid #2563eb",
+  background: "#2563eb",
+  color: "white",
+  fontWeight: 800,
+  cursor: "pointer",
+};

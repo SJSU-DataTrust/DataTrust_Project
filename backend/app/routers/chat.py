@@ -391,13 +391,62 @@ def guarded_chat_stream(request: ChatRequest, user_id: str = Depends(get_current
     policy_result = apply_semantic_policy_overrides(policy_result, understanding)
     policy_ms = round((time.perf_counter() - t1) * 1000, 2)
 
+    # if policy_result["status"] == "blocked":
+    #     raise HTTPException(
+    #         status_code=403,
+    #         detail={
+    #             "status": "blocked",
+    #             "answer": None,
+    #             "policy": build_policy_response(policy_result, understanding),
+    #             "selected_sources": [],
+    #             "source_references": [],
+    #             "retrieval_count": 0,
+    #             "metadata": {
+    #                 "request_id": request_id,
+    #                 "normalized_text": understanding["normalized_text"],
+    #                 "prompt_injection_hits": understanding["prompt_injection_hits"],
+    #                 "timings_ms": {
+    #                     "user_context": user_context_ms,
+    #                     "policy": policy_ms,
+    #                     "total": round((time.perf_counter() - total_start) * 1000, 2),
+    #                 },
+    #             },
+    #         },
+    #     )
     if policy_result["status"] == "blocked":
+        blocked_payload = {
+            "request_id": request_id,
+            "user_id": user_context["user_id"],
+            "query": request.text,
+            "normalized_text": understanding["normalized_text"],
+            "categories": understanding["categories"],
+            "action": understanding["action"],
+            "policy": policy_result,
+        }
+
+        log_policy_event(
+            event_type="CHAT_BLOCKED_BY_POLICY",
+            payload=blocked_payload,
+        )
+
         raise HTTPException(
             status_code=403,
             detail={
                 "status": "blocked",
                 "answer": None,
-                "policy": build_policy_response(policy_result, understanding),
+                "policy": {
+                    "status": policy_result["status"],
+                    "decision": policy_result["decision"],
+                    "code": policy_result.get("code"),
+                    "reason_category": policy_result.get("reason_category"),
+                    "user_safe_explanation": policy_result.get("user_safe_explanation"),
+                    "suggested_safe_alternative": policy_result.get("suggested_safe_alternative"),
+                    "matched_rules": policy_result["matched_rules"],
+                    "categories": understanding["categories"],
+                    "action": understanding["action"],
+                    "risk_level": policy_result["risk_level"],
+                    "risk_score": policy_result["risk_score"],
+                },
                 "selected_sources": [],
                 "source_references": [],
                 "retrieval_count": 0,
@@ -405,15 +454,10 @@ def guarded_chat_stream(request: ChatRequest, user_id: str = Depends(get_current
                     "request_id": request_id,
                     "normalized_text": understanding["normalized_text"],
                     "prompt_injection_hits": understanding["prompt_injection_hits"],
-                    "timings_ms": {
-                        "user_context": user_context_ms,
-                        "policy": policy_ms,
-                        "total": round((time.perf_counter() - total_start) * 1000, 2),
-                    },
                 },
             },
         )
-
+        
     normalized = understanding["normalized_text"].strip()
     if normalized in SMALL_TALK_INPUTS:
         def small_talk_stream():

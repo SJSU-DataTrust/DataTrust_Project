@@ -32,5 +32,9 @@ class Settings:
     GOOGLE_DRIVE_HR_L1_FOLDER_ID = os.getenv("GOOGLE_DRIVE_HR_L1_FOLDER_ID", "")
     GOOGLE_DRIVE_HR_L2_FOLDER_ID = os.getenv("GOOGLE_DRIVE_HR_L2_FOLDER_ID", "")
     GOOGLE_DRIVE_HR_L3_FOLDER_ID = os.getenv("GOOGLE_DRIVE_HR_L3_FOLDER_ID", "")
+
+    AUTH0_DOMAIN = os.getenv("AUTH0_DOMAIN", "")
+    AUTH0_AUDIENCE = os.getenv("AUTH0_AUDIENCE", "")
+    AUTH0_ISSUER = os.getenv("AUTH0_ISSUER", "")
     
 settings = Settings()
