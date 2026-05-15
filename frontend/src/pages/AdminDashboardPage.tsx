@@ -521,7 +521,7 @@ export default function AdminDashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {recentDocs.slice(0, 6).map((doc) => (
+              {recentDocs.slice(0, 12).map((doc) => (
                 <tr key={doc.id} style={{ borderTop: "1px solid #1e293b" }}>
                   <td style={td}>{doc.title}</td>
                   <td style={td}>{doc.source_systems?.code || "-"}</td>

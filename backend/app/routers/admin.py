@@ -5,6 +5,7 @@ from app.db.supabase_client import supabase
 from app.db.mongodb_client import get_mongo_db
 from datetime import datetime
 from collections import defaultdict
+from app.services.admin_auth_service import require_admin_user
 
 router = APIRouter()
 
@@ -96,22 +97,52 @@ def chunks_by_level(user_id: str = Depends(get_current_user_id)):
     return [{"name": k, "value": v} for k, v in counts.items()]
 
 
+# @router.get("/admin/recent-documents")
+# def recent_documents(user_id: str = Depends(get_current_user_id)):
+#     require_admin(user_id)
+
+#     return (
+#         supabase.table("documents")
+#         .select(
+#             "id,title,resource_path,sync_status,is_active,created_at,updated_at,"
+#             "source_systems(code),departments(code),auth_levels(code)"
+#         )
+#         .order("updated_at", desc=True)
+#         .limit(10)
+#         .execute()
+#         .data
+#         or []
+#     )
 @router.get("/admin/recent-documents")
 def recent_documents(user_id: str = Depends(get_current_user_id)):
-    require_admin(user_id)
+    require_admin_user(user_id)
 
-    return (
-        supabase.table("documents")
-        .select(
-            "id,title,resource_path,sync_status,is_active,created_at,updated_at,"
-            "source_systems(code),departments(code),auth_levels(code)"
+    try:
+        result = (
+            supabase.table("documents")
+            .select("""
+                id,
+                title,
+                resource_path,
+                sync_status,
+                created_at,
+                updated_at,
+                source_systems:source_system_id(code,name),
+                departments:department_id(code,name),
+                auth_levels:min_auth_level_id(code,rank)
+            """)
+            .order("updated_at", desc=True)
+            .limit(25)
+            .execute()
         )
-        .order("updated_at", desc=True)
-        .limit(10)
-        .execute()
-        .data
-        or []
-    )
+
+        return result.data or []
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch recent documents: {str(e)}"
+        )
 
 
 @router.get("/admin/recent-policy-events")
