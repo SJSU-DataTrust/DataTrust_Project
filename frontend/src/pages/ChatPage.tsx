@@ -284,6 +284,12 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
 
+  const activeConversationIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activeConversationIdRef.current = activeConversationId;
+  }, [activeConversationId]);
+
   const activeConversation = useMemo(
     () => conversations.find((c) => c.id === activeConversationId) || null,
     [conversations, activeConversationId]
@@ -310,14 +316,23 @@ export default function ChatPage() {
   }
 
   function scheduleSave(conversation: Conversation) {
-    if (saveTimerRef.current) {
-      window.clearTimeout(saveTimerRef.current);
-    }
-
-    saveTimerRef.current = window.setTimeout(() => {
-      persistConversation(conversation);
-    }, 500);
+  if (saveTimerRef.current) {
+    window.clearTimeout(saveTimerRef.current);
   }
+
+  saveTimerRef.current = window.setTimeout(() => {
+    persistConversation(conversation);
+  }, 400);
+  }
+  // function scheduleSave(conversation: Conversation) {
+  //   if (saveTimerRef.current) {
+  //     window.clearTimeout(saveTimerRef.current);
+  //   }
+
+  //   saveTimerRef.current = window.setTimeout(() => {
+  //     persistConversation(conversation);
+  //   }, 500);
+  // }
 
   useEffect(() => {
     localStorage.removeItem("datatrust_conversations");
@@ -384,61 +399,148 @@ export default function ChatPage() {
     } catch (err) {
       console.error("Failed to create chat session", err);
     }
+  } 
+
+  function ensureActiveConversation(): string {
+  let activeId = activeConversationIdRef.current;
+
+  if (activeId && conversations.some((c) => c.id === activeId)) {
+    return activeId;
   }
 
-  function updateActiveMessages(updater: (prev: ChatMessage[]) => ChatMessage[]) {
-    setConversations((prev) => {
-      let activeId = activeConversationId;
-      let working = [...prev];
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
 
-      if (!activeId || !working.some((c) => c.id === activeId)) {
-        activeId = crypto.randomUUID();
-        setActiveConversationId(activeId);
+  const newConversation: Conversation = {
+    id,
+    title: "New chat",
+    messages: [],
+    createdAt: now,
+    updatedAt: now,
+  };
 
-        const now = new Date().toISOString();
-        working = [
-          {
-            id: activeId,
-            title: "New chat",
-            messages: [],
-            createdAt: now,
-            updatedAt: now,
-          },
-          ...working,
-        ];
-      }
+  activeConversationIdRef.current = id;
+  setActiveConversationId(id);
+  setConversations((prev) => [newConversation, ...prev]);
 
-      let conversationToSave: Conversation | null = null;
+  return id;
+}
 
-      const next = working.map((conv) => {
-        if (conv.id !== activeId) return conv;
+  function updateActiveMessages(
+  updater: (prev: ChatMessage[]) => ChatMessage[],
+  shouldPersist = false
+) {
+  const activeId = activeConversationIdRef.current || ensureActiveConversation();
 
-        const nextMessages = updater(conv.messages);
-        const firstUser = nextMessages.find((m) => m.type === "user") as
-          | { type: "user"; text: string }
-          | undefined;
+  setConversations((prev) => {
+    let found = false;
+    let conversationToSave: Conversation | null = null;
 
-        const updated: Conversation = {
-          ...conv,
-          title:
-            conv.title === "New chat" && firstUser?.text
-              ? firstUser.text.slice(0, 42)
-              : conv.title,
-          messages: nextMessages,
-          updatedAt: new Date().toISOString(),
-        };
+    const next = prev.map((conv) => {
+      if (conv.id !== activeId) return conv;
 
-        conversationToSave = updated;
-        return updated;
-      });
+      found = true;
 
-      if (conversationToSave) {
-        scheduleSave(conversationToSave);
-      }
+      const nextMessages = updater(conv.messages);
 
-      return next;
+      const firstUser = nextMessages.find((m) => m.type === "user") as
+        | { type: "user"; text: string }
+        | undefined;
+
+      const updated: Conversation = {
+        ...conv,
+        title:
+          conv.title === "New chat" && firstUser?.text
+            ? firstUser.text.slice(0, 42)
+            : conv.title,
+        messages: nextMessages,
+        updatedAt: new Date().toISOString(),
+      };
+
+      conversationToSave = updated;
+      return updated;
     });
-  }
+
+    if (!found) {
+      const now = new Date().toISOString();
+      const nextMessages = updater([]);
+
+      const firstUser = nextMessages.find((m) => m.type === "user") as
+        | { type: "user"; text: string }
+        | undefined;
+
+      const created: Conversation = {
+        id: activeId,
+        title: firstUser?.text ? firstUser.text.slice(0, 42) : "New chat",
+        messages: nextMessages,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      conversationToSave = created;
+      next.unshift(created);
+    }
+
+    if (shouldPersist && conversationToSave) {
+      scheduleSave(conversationToSave);
+    }
+
+    return next;
+  });
+}
+  // function updateActiveMessages(updater: (prev: ChatMessage[]) => ChatMessage[]) {
+  //   setConversations((prev) => {
+  //     let activeId = activeConversationId;
+  //     let working = [...prev];
+
+  //     if (!activeId || !working.some((c) => c.id === activeId)) {
+  //       activeId = crypto.randomUUID();
+  //       setActiveConversationId(activeId);
+
+  //       const now = new Date().toISOString();
+  //       working = [
+  //         {
+  //           id: activeId,
+  //           title: "New chat",
+  //           messages: [],
+  //           createdAt: now,
+  //           updatedAt: now,
+  //         },
+  //         ...working,
+  //       ];
+  //     }
+
+  //     let conversationToSave: Conversation | null = null;
+
+  //     const next = working.map((conv) => {
+  //       if (conv.id !== activeId) return conv;
+
+  //       const nextMessages = updater(conv.messages);
+  //       const firstUser = nextMessages.find((m) => m.type === "user") as
+  //         | { type: "user"; text: string }
+  //         | undefined;
+
+  //       const updated: Conversation = {
+  //         ...conv,
+  //         title:
+  //           conv.title === "New chat" && firstUser?.text
+  //             ? firstUser.text.slice(0, 42)
+  //             : conv.title,
+  //         messages: nextMessages,
+  //         updatedAt: new Date().toISOString(),
+  //       };
+
+  //       conversationToSave = updated;
+  //       return updated;
+  //     });
+
+  //     if (conversationToSave) {
+  //       scheduleSave(conversationToSave);
+  //     }
+
+  //     return next;
+  //   });
+  // }
 
   async function deleteConversation(id: string) {
     setConversations((prev) => prev.filter((c) => c.id !== id));
@@ -485,15 +587,24 @@ export default function ChatPage() {
     }
 
     const userText = text.trim();
+    ensureActiveConversation();
     setText("");
     setLoading(true);
     setError("");
 
-    updateActiveMessages((prev) => [
-      ...prev,
-      { type: "user", text: userText },
-      { type: "streaming", text: "" },
-    ]);
+    updateActiveMessages(
+      (prev) => [
+        ...prev,
+        { type: "user", text: userText },
+        { type: "streaming", text: "" },
+      ],
+      true
+    );
+    // updateActiveMessages((prev) => [
+    //   ...prev,
+    //   { type: "user", text: userText },
+    //   { type: "streaming", text: "" },
+    // ]);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -540,7 +651,7 @@ export default function ChatPage() {
               }
 
               return copy;
-            });
+            },true);
           },
 
           onBlocked: (blockedPayload) => {
@@ -554,7 +665,7 @@ export default function ChatPage() {
 
               copy.push({ type: "blocked", data });
               return copy;
-            });
+            },true);
           },
 
           onError: (message) => {
@@ -572,7 +683,7 @@ export default function ChatPage() {
               });
 
               return copy;
-            });
+            },true);
 
             setError(message);
           },
